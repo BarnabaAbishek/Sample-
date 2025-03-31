@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-BOT_TOKEN = "7667201218:AAFn97bkqoSTMgNTAqtkzkhBIgRRTl0zeuw"
+BOT_TOKEN = "7889340330:AAFHxWrrcOi3-x4z7V9j2qj-Fp3KaNgOs4Y"
 API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
@@ -170,7 +170,7 @@ async def start(client, message):
     await store_user_info(user.id, user.username, user.first_name, user.last_name)
     has_joined = await is_user_joined(client, user.id)
     
-    image_id = "AgACAgUAAxkBAAIRU2fqEqkfirnoHYmnC6uLwOnHly1oAAKtxzEbBMZIV4TtyAvDUj2HAAgBAAMCAAN4AAceBA"
+    image_id = "AgACAgUAAxkBAAICRWfqFJqlsCxtBPc1-1MHYmKtWx-0AAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
     
     join_buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINK1)],
