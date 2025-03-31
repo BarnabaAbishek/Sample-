@@ -141,7 +141,7 @@ def shorten_url(long_url):
         params = {
             'key': SHORTENER_API,
             'short': long_url,
-            'name': 'tdafilesharebot'  # You can specify a custom short name if needed
+            'name': ''  # You can specify a custom short name if needed
         }
         
         response = requests.get(SHORTENER_URL, params=params)
