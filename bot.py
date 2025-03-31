@@ -53,7 +53,7 @@ except Exception as e:
     logger.error(f"Firebase initialization error: {e}")
     raise
 
-app = Client("bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("tdafilesharebot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
