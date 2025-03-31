@@ -23,9 +23,8 @@ BOT_TOKEN = "7889340330:AAFHxWrrcOi3-x4z7V9j2qj-Fp3KaNgOs4Y"
 API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
-SHORTENER_API = "664241eb5a2f420785d285e28da89fa9"  # Rebrandly API key
-SHORTENER_URL = "https://api.rebrandly.com/v1/links"
-DOMAIN_ID = None  # Optional: Set your Rebrandly domain ID if you have a custom domain
+SHORTENER_API = "2ca4e6e571a6eefd993a9b4af80ad2f006534"  # Cutt.ly API key
+SHORTENER_URL = "https://cutt.ly/api/api.php"
 
 # Channel information
 CHANNEL_USERNAME = "@TEAMTDSTAMILFANDUB"
@@ -137,27 +136,22 @@ async def send_individual_file(client, chat_id, files):
             await client.send_message(chat_id, f"Error sending file: {e}")
 
 def shorten_url(long_url):
-    """Shorten a URL using Rebrandly API"""
+    """Shorten a URL using Cutt.ly API"""
     try:
-        headers = {
-            "Content-Type": "application/json",
-            "apikey": SHORTENER_API
+        params = {
+            'key': SHORTENER_API,
+            'short': long_url,
+            'name': 'tdafilesharebot'  # You can specify a custom short name if needed
         }
         
-        payload = {
-            "destination": long_url,
-            "domain": {"fullName": "rebrand.ly"}  # Use your custom domain if you have one
-        }
+        response = requests.get(SHORTENER_URL, params=params)
+        response_data = response.json()
         
-        if DOMAIN_ID:
-            payload["domain"]["id"] = DOMAIN_ID
-        
-        response = requests.post(SHORTENER_URL, headers=headers, json=payload)
-        
-        if response.status_code == 200:
-            return f"https://{response.json()['shortUrl']}"
+        if response_data.get('url', {}).get('status') == 7:
+            return response_data['url']['shortLink']
         else:
-            logger.error(f"Rebrandly API error: {response.status_code} - {response.text}")
+            error_msg = response_data.get('url', {}).get('error', 'Unknown error')
+            logger.error(f"Cutt.ly API error: {error_msg}")
             return None
     except Exception as e:
         logger.error(f"Error shortening URL: {e}")
@@ -322,7 +316,7 @@ async def shortener_command(client, message):
             "🔗 *URL Shortener*\n\n"
             "Usage: `/shortener <long_url>`\n"
             "Example: `/shortener https://example.com/very/long/url`\n\n"
-            "Note: This uses Rebrandly API to shorten URLs",
+            "Note: This uses Cutt.ly API to shorten URLs",
             parse_mode=enums.ParseMode.MARKDOWN
         )
         return
@@ -332,7 +326,7 @@ async def shortener_command(client, message):
         await message.reply("❌ Please provide a valid URL starting with http:// or https://")
         return
     
-    processing_msg = await message.reply("⏳ Shortening URL using Rebrandly, please wait...")
+    processing_msg = await message.reply("⏳ Shortening URL using Cutt.ly, please wait...")
     
     short_url = shorten_url(long_url)
     if short_url:
@@ -380,7 +374,7 @@ async def handle_actions(client, message):
             bot_username = (await client.get_me()).username
             share_link = f"https://t.me/{bot_username}?start={unique_id}"
             
-            # Shorten the share link using Rebrandly
+            # Shorten the share link using Cutt.ly
             short_link = shorten_url(share_link) or share_link
             
             await message.reply(
@@ -479,7 +473,7 @@ async def set_commands():
         BotCommand("batch", "Upload files (Owner)"),
         BotCommand("broadcast", "Send to all users (Owner)"),
         BotCommand("users", "List users (Owner)"),
-        BotCommand("shortener", "Shorten URLs using Rebrandly (Owner)")
+        BotCommand("shortener", "Shorten URLs using Cutt.ly (Owner)")
     ])
 
 app.start()
