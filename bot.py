@@ -135,8 +135,8 @@ async def start(client, message):
     await store_user_info(user.id, user.username, user.first_name, user.last_name)
     has_joined = await is_user_joined(client, user.id)
     
-    image_id = "AgACAgUAAxkBAAMMZ-liXpvWGCRtUVvzNSmdX62f0jkAAknIMRvOgUBX60loZgKrC-kACAEAAwIAA3gABx4E"
-    image_id1 = "AgACAgUAAxkBAAIB-mfpVeQzLZUT_3PUziWw4vJcGhAEAAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
+    image_id = "AgACAgUAAxkBAAICRWfqFJqlsCxtBPc1-1MHYmKtWx-0AAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
+    image_id1 = "AgACAgUAAxkBAAICRWfqFJqlsCxtBPc1-1MHYmKtWx-0AAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
     
     join_buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINKS[0])],
