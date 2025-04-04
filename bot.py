@@ -69,7 +69,8 @@ def get_media_info(message):
             return {
                 "file_id": media.file_id,
                 "file_name": getattr(media, "file_name", f"{media_type}_{media.file_id[:6]}"),
-                "file_type": media_type
+                "file_type": media_type,
+                "caption": message.caption  # Added caption field
             }
     return None
 
@@ -122,7 +123,9 @@ async def send_individual_file(client, chat_id, files):
                 await client.send_message(chat_id, file["file_name"])
             else:
                 await getattr(client, f"send_{file['file_type']}")(
-                    chat_id, file["file_id"]
+                    chat_id, 
+                    file["file_id"],
+                    caption=file.get("caption")  # Added caption parameter
                 )
         except Exception as e:
             logger.error(f"Error sending file: {e}")
@@ -222,16 +225,6 @@ async def handle_getfile(client, callback_query):
     else:
         await callback_query.answer("❌ Please join all 4 channels first!", show_alert=True)
 
-# ... [rest of your command handlers remain unchanged] ...
-
-async def set_commands():
-    await app.set_bot_commands([
-        BotCommand("start", "Show start message"),
-        BotCommand("batch", "Upload files (Owner)"),
-        BotCommand("broadcast", "Send to all users (Owner)"),
-        BotCommand("users", "List users (Owner)")
-    ])
-
 @app.on_message(filters.command("batch") & filters.user(OWNER_IDS))
 async def batch_command(client, message):
     user_id = message.from_user.id
@@ -282,7 +275,6 @@ async def list_users(client, message):
             response += f"📛: @{username}\n"
             response += "――――――――――――――――――\n"
         
-        # Split the message if too long
         for i in range(0, len(response), 4096):
             part = response[i:i+4096]
             await message.reply(part, parse_mode=enums.ParseMode.MARKDOWN)
@@ -370,7 +362,7 @@ async def handle_actions(client, message):
                 except Exception as e:
                     logger.error(f"Error broadcasting to {user_id}: {e}")
                     failed += 1
-                await asyncio.sleep(0.5)  # Rate limiting
+                await asyncio.sleep(0.5)
             
             await status_msg.edit_text(
                 f"✅ Broadcast completed!\n\n"
@@ -395,7 +387,12 @@ async def media_text_handler(client, message):
 
     if state["mode"] == "batch":
         if message.text and not message.text.startswith('/'):
-            state["files"].append({"file_id": None, "file_name": message.text, "file_type": "text"})
+            state["files"].append({
+                "file_id": None, 
+                "file_name": message.text, 
+                "file_type": "text",
+                "caption": None
+            })
             await message.reply(f"✅ Text added to batch! Total items: {len(state['files'])}\nSend /done when ready.")
         elif media := get_media_info(message):
             state["files"].append(media)
@@ -403,16 +400,28 @@ async def media_text_handler(client, message):
 
     elif state["mode"] == "broadcast":
         if message.text and not message.text.startswith('/'):
-            state["content"].append({"type": "text", "content": message.text})
+            state["content"].append({
+                "type": "text", 
+                "content": message.text,
+                "caption": None
+            })
             await message.reply(f"✅ Text added to broadcast! Total items: {len(state['content'])}\nSend /done when ready.")
         elif media := get_media_info(message):
             state["content"].append({
                 "type": media["file_type"],
                 "file_id": media["file_id"],
-                "file_name": media["file_name"]
+                "file_name": media["file_name"],
+                "caption": media.get("caption")
             })
             await message.reply(f"✅ Media added to broadcast! Total items: {len(state['content'])}\nSend /done when ready.")
 
+async def set_commands():
+    await app.set_bot_commands([
+        BotCommand("start", "Show start message"),
+        BotCommand("batch", "Upload files (Owner)"),
+        BotCommand("broadcast", "Send to all users (Owner)"),
+        BotCommand("users", "List users (Owner)")
+    ])
 
 app.start()
 print("Bot started!")
