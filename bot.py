@@ -9,7 +9,6 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from datetime import datetime
-import requests
 
 # Configure logging
 logging.basicConfig(
@@ -23,19 +22,22 @@ BOT_TOKEN = "7889340330:AAFHxWrrcOi3-x4z7V9j2qj-Fp3KaNgOs4Y"
 API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
-SHORTENER_API = "2ca4e6e571a6eefd993a9b4af80ad2f006534"  # Cutt.ly API key
-SHORTENER_URL = "https://cutt.ly/api/api.php"
 
-# Channel information
-CHANNEL_USERNAME = "@TEAMTDSTAMILFANDUB"
-CHANNEL_ID = -1002180565285
-CHANNEL_ID = -1002241070786
-CHANNEL_ID = -1002472888393
-CHANNEL_ID = -1002149857870
-CHANNEL_LINK1 = "https://t.me/TEAMTDSTAMILFANDUB"
-CHANNEL_LINK2 = "https://t.me/Shopping_Offers_Deals_And_Loot"
-CHANNEL_LINK3 = "https://t.me/+jsC6K05AbIA2NDRl"
-CHANNEL_LINK4 = "https://t.me/Team_Tda_Network"
+# Channel information - Properly defined as lists
+CHANNEL_IDS = [
+    -1002180565285,  # TEAMTDSTAMILFANDUB
+    -1002241070786,  # Shopping_Offers_Deals_And_Loot
+    -1002472888393,  # Team_Tda_Network
+    -1002149857870   # Additional channel
+]
+
+CHANNEL_LINKS = [
+    "https://t.me/TEAMTDSTAMILFANDUB",
+    "https://t.me/Shopping_Offers_Deals_And_Loot",
+    "https://t.me/+jsC6K05AbIA2NDRl",
+    "https://t.me/Team_Tda_Network"
+]
+
 SOURCE_CHANNEL = "https://t.me/+jsC6K05AbIA2NDRl"
 
 # Initialize Firebase
@@ -53,7 +55,7 @@ except Exception as e:
     logger.error(f"Firebase initialization error: {e}")
     raise
 
-app = Client("tdafilesharebot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
@@ -83,29 +85,20 @@ async def store_user_info(user_id, username, first_name, last_name):
     except Exception as e:
         logger.error(f"Error storing user info: {e}")
 
-async def check_channel_membership(client, user_id, channel):
+async def check_channel_membership(client, user_id, channel_id):
     try:
-        member = await client.get_chat_member(channel, user_id)
+        member = await client.get_chat_member(channel_id, user_id)
         return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
     except Exception as e:
-        logger.error(f"Error checking channel {channel}: {e}")
+        logger.error(f"Error checking channel {channel_id}: {e}")
         return False
 
 async def is_user_joined(client, user_id):
     try:
-        # List of all channels to check (ID or username)
-        channels = [
-            CHANNEL_ID,                 # Main channel by ID
-            "@TEAMTDSTAMILFANDUB",      # Channel 1
-            "@Shopping_Offers_Deals_And_Loot",  # Channel 2
-            "@Team_Tda_Network"         # Channel 4
-        ]
-        
-        # Check membership in all channels
-        for channel in channels:
-            if not await check_channel_membership(client, user_id, channel):
-                return False
-        return True
+        results = await asyncio.gather(
+            *[check_channel_membership(client, user_id, channel_id) for channel_id in CHANNEL_IDS]
+        )
+        return all(results)
     except Exception as e:
         logger.error(f"Error in is_user_joined: {e}")
         return False
@@ -135,28 +128,6 @@ async def send_individual_file(client, chat_id, files):
             logger.error(f"Error sending file: {e}")
             await client.send_message(chat_id, f"Error sending file: {e}")
 
-def shorten_url(long_url):
-    """Shorten a URL using Cutt.ly API"""
-    try:
-        params = {
-            'key': SHORTENER_API,
-            'short': long_url,
-            'name': ''  # You can specify a custom short name if needed
-        }
-        
-        response = requests.get(SHORTENER_URL, params=params)
-        response_data = response.json()
-        
-        if response_data.get('url', {}).get('status') == 7:
-            return response_data['url']['shortLink']
-        else:
-            error_msg = response_data.get('url', {}).get('error', 'Unknown error')
-            logger.error(f"Cutt.ly API error: {error_msg}")
-            return None
-    except Exception as e:
-        logger.error(f"Error shortening URL: {e}")
-        return None
-
 # Command Handlers
 @app.on_message(filters.command("start"))
 async def start(client, message):
@@ -164,13 +135,14 @@ async def start(client, message):
     await store_user_info(user.id, user.username, user.first_name, user.last_name)
     has_joined = await is_user_joined(client, user.id)
     
-    image_id = "AgACAgUAAxkBAAICRWfqFJqlsCxtBPc1-1MHYmKtWx-0AAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
+    image_id = "AgACAgUAAxkBAAMMZ-liXpvWGCRtUVvzNSmdX62f0jkAAknIMRvOgUBX60loZgKrC-kACAEAAwIAA3gABx4E"
+    image_id1 = "AgACAgUAAxkBAAIB-mfpVeQzLZUT_3PUziWw4vJcGhAEAAKtxzEbBMZIVxk4Ddl2zCrnAAgBAAMCAAN4AAceBA"
     
     join_buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINK1)],
-        [InlineKeyboardButton("📢 CHANNEL 2", url=CHANNEL_LINK2)],
-        [InlineKeyboardButton("📢 CHANNEL 3", url=CHANNEL_LINK3)],
-        [InlineKeyboardButton("📢 CHANNEL 4", url=CHANNEL_LINK4)]
+        [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINKS[0])],
+        [InlineKeyboardButton("📢 CHANNEL 2", url=CHANNEL_LINKS[1])],
+        [InlineKeyboardButton("📢 CHANNEL 3", url=CHANNEL_LINKS[2])],
+        [InlineKeyboardButton("📢 CHANNEL 4", url=CHANNEL_LINKS[3])]
     ])
     
     if len(message.command) == 1:
@@ -197,7 +169,7 @@ async def start(client, message):
             """
             await client.send_photo(
                 chat_id=message.chat.id,
-                photo=image_id,
+                photo=image_id1,
                 caption=caption,
                 parse_mode=enums.ParseMode.MARKDOWN
             )
@@ -214,10 +186,10 @@ async def start(client, message):
 *Please join all channels below:*
             """
             buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINK1)],
-                [InlineKeyboardButton("📢 CHANNEL 2", url=CHANNEL_LINK2)],
-                [InlineKeyboardButton("📢 CHANNEL 3", url=CHANNEL_LINK3)],
-                [InlineKeyboardButton("📢 CHANNEL 4", url=CHANNEL_LINK4)],
+                [InlineKeyboardButton("📢 CHANNEL 1", url=CHANNEL_LINKS[0])],
+                [InlineKeyboardButton("📢 CHANNEL 2", url=CHANNEL_LINKS[1])],
+                [InlineKeyboardButton("📢 CHANNEL 3", url=CHANNEL_LINKS[2])],
+                [InlineKeyboardButton("📢 CHANNEL 4", url=CHANNEL_LINKS[3])],
                 [InlineKeyboardButton("📥 GET FILE", callback_data=f"getfile_{unique_id}")]
             ])
             
@@ -249,6 +221,16 @@ async def handle_getfile(client, callback_query):
             await callback_query.answer("❌ File not found or deleted!", show_alert=True)
     else:
         await callback_query.answer("❌ Please join all 4 channels first!", show_alert=True)
+
+# ... [rest of your command handlers remain unchanged] ...
+
+async def set_commands():
+    await app.set_bot_commands([
+        BotCommand("start", "Show start message"),
+        BotCommand("batch", "Upload files (Owner)"),
+        BotCommand("broadcast", "Send to all users (Owner)"),
+        BotCommand("users", "List users (Owner)")
+    ])
 
 @app.on_message(filters.command("batch") & filters.user(OWNER_IDS))
 async def batch_command(client, message):
@@ -309,37 +291,6 @@ async def list_users(client, message):
         logger.error(f"Error listing users: {e}")
         await message.reply(f"❌ Error listing users: {e}")
 
-@app.on_message(filters.command("shortener") & filters.user(OWNER_IDS))
-async def shortener_command(client, message):
-    if len(message.command) < 2:
-        await message.reply(
-            "🔗 *URL Shortener*\n\n"
-            "Usage: `/shortener <long_url>`\n"
-            "Example: `/shortener https://example.com/very/long/url`\n\n"
-            "Note: This uses Cutt.ly API to shorten URLs",
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-        return
-    
-    long_url = ' '.join(message.command[1:])
-    if not (long_url.startswith('http://') or long_url.startswith('https://')):
-        await message.reply("❌ Please provide a valid URL starting with http:// or https://")
-        return
-    
-    processing_msg = await message.reply("⏳ Shortening URL using Cutt.ly, please wait...")
-    
-    short_url = shorten_url(long_url)
-    if short_url:
-        await processing_msg.edit_text(
-            f"✅ *URL Shortened Successfully!*\n\n"
-            f"🔗 Original URL: `{long_url}`\n"
-            f"🪄 Short URL: `{short_url}`\n\n"
-            f"Click to copy: `{short_url}`",
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-    else:
-        await processing_msg.edit_text("❌ Failed to shorten URL. Please try again later.")
-
 @app.on_message(filters.command(["done", "cancel"]) & filters.user(OWNER_IDS))
 async def handle_actions(client, message):
     user_id = message.from_user.id
@@ -373,14 +324,9 @@ async def handle_actions(client, message):
 
             bot_username = (await client.get_me()).username
             share_link = f"https://t.me/{bot_username}?start={unique_id}"
-            
-            # Shorten the share link using Cutt.ly
-            short_link = shorten_url(share_link) or share_link
-            
             await message.reply(
                 f"✅ *Batch Upload Complete!*\n\n"
-                f"🔗 Original Link: `{share_link}`\n"
-                f"🪄 Short Link: `{short_link}`\n\n"
+                f"🔗 Download Link: {share_link}\n\n"
                 f"📌 Files will be stored permanently until deleted.",
                 parse_mode=enums.ParseMode.MARKDOWN
             )
@@ -467,14 +413,6 @@ async def media_text_handler(client, message):
             })
             await message.reply(f"✅ Media added to broadcast! Total items: {len(state['content'])}\nSend /done when ready.")
 
-async def set_commands():
-    await app.set_bot_commands([
-        BotCommand("start", "Show start message"),
-        BotCommand("batch", "Upload files (Owner)"),
-        BotCommand("broadcast", "Send to all users (Owner)"),
-        BotCommand("users", "List users (Owner)"),
-        BotCommand("shortener", "Shorten URLs using Cutt.ly (Owner)")
-    ])
 
 app.start()
 print("Bot started!")
