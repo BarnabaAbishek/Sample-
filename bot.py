@@ -21,7 +21,7 @@ OWNER_IDS = [5891854177, 6611564855]
 
 # Channel information - MUST BE PROPERLY CONFIGURED
 SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Channel username without @
-STORAGE_CHANNEL = "-1002585582507"  # Your private channel ID as string
+STORAGE_CHANNEL = -1002585582507  # Your private channel ID as integer (with -100 prefix)
 
 app = Client(
     "Solo_Leveling_Manhwa_tamil_bot",
@@ -444,7 +444,7 @@ async def main():
             print("CRITICAL: Could not access storage channel. Please ensure:")
             print("1. The channel ID is correct (with -100 prefix)")
             print("2. The bot is added as admin in the channel")
-            print("3. The channel is not deleted or restricted")
+            print("3. The channel exists and is accessible")
             await app.stop()
             return
         
@@ -461,7 +461,7 @@ async def main():
             print("Bot stopped gracefully")
 
 if __name__ == "__main__":
-    # Create a new event loop
+    # Create and manage our own event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
@@ -469,5 +469,7 @@ if __name__ == "__main__":
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
     finally:
         loop.close()
