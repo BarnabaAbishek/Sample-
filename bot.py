@@ -19,11 +19,16 @@ API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
 
-# Channel information
-SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Without @
-STORAGE_CHANNEL = -1002585582507  # Your private channel ID where bot is admin
+# Channel information - MUST BE PROPERLY CONFIGURED
+SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Channel username without @
+STORAGE_CHANNEL = "-1002585582507"  # Your private channel ID as string
 
-app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client(
+    "Solo_Leveling_Manhwa_tamil_bot",
+    bot_token=BOT_TOKEN,
+    api_id=API_ID,
+    api_hash=API_HASH
+)
 
 # User state management
 user_states = {}
@@ -104,7 +109,6 @@ async def check_user_joined_channel(client, user_id):
         logger.error(f"Error checking channel membership: {e}")
         return False
 
-# Command Handlers
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
@@ -121,7 +125,7 @@ async def start(client, message):
             ]])
             
             caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
+*Hello {user.first_name}*
 
 *You must join our channel to access the files*
 
@@ -136,9 +140,9 @@ async def start(client, message):
             )
         else:
             caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
+*Hello {user.first_name}*
 
-*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ](https://t.me/{SOURCE_CHANNEL})
+*I am Anime Bot I will give you Anime Files From* [Tamil Dubbed Anime](https://t.me/{SOURCE_CHANNEL})
             """
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -157,7 +161,7 @@ async def start(client, message):
             ]])
             
             caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
+*Hello {user.first_name}*
 
 *You must join our channel to access this file*
 
@@ -267,53 +271,40 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
-            # Store all files and create a single message with all file links
             bot_username = (await client.get_me()).username
             result_message = "📦 *Batch Upload Complete!*\n\n"
-            result_message += "🔗 *Single Download Link:*\n"
             
-            # Create a message containing all files
+            # Create a container message in storage channel
+            container_text = "📦 *Batch Files Collection*\n\n"
+            for i, file_data in enumerate(state["files"], 1):
+                container_text += f"{i}. {file_data.get('file_name', 'File')}\n"
+            
             try:
-                if len(state["files"]) == 1:
-                    # Single file - just forward it
-                    file_data = state["files"][0]
+                container_msg = await client.send_message(
+                    chat_id=STORAGE_CHANNEL,
+                    text=container_text
+                )
+                
+                # Store all files in the storage channel
+                for file_data in state["files"]:
                     if file_data["file_type"] == "text":
-                        msg = await client.send_message(STORAGE_CHANNEL, file_data["file_name"])
+                        await client.send_message(
+                            chat_id=STORAGE_CHANNEL,
+                            text=file_data["file_name"],
+                            reply_to_message_id=container_msg.id
+                        )
                     else:
                         send_method = getattr(client, f"send_{file_data['file_type']}")
-                        msg = await send_method(
-                            STORAGE_CHANNEL,
-                            file_data["file_id"],
-                            caption=file_data.get("caption")
+                        await send_method(
+                            chat_id=STORAGE_CHANNEL,
+                            file_id=file_data["file_id"],
+                            caption=file_data.get("caption"),
+                            reply_to_message_id=container_msg.id
                         )
-                    message_id = msg.id
-                else:
-                    # Multiple files - send as media group if possible
-                    media_group = []
-                    for file_data in state["files"]:
-                        if file_data["file_type"] in ["photo", "video"]:
-                            media_group.append((
-                                enums.MessageMediaType(file_data["file_type"].upper()),
-                                file_data["file_id"],
-                                {"caption": file_data.get("caption")}
-                            ))
-                    
-                    if media_group:
-                        # Send as media group
-                        sent_messages = await client.send_media_group(STORAGE_CHANNEL, media_group)
-                        message_id = sent_messages[0].id
-                    else:
-                        # Fallback to text message with file links
-                        text_content = "\n\n".join(
-                            f"📄 {file.get('file_name', 'File')}" 
-                            for file in state["files"]
-                        )
-                        msg = await client.send_message(STORAGE_CHANNEL, text_content)
-                        message_id = msg.id
                 
                 # Generate single share link
-                share_link = f"https://t.me/{bot_username}?start={message_id}"
-                result_message += f"`{share_link}`\n\n"
+                share_link = f"https://t.me/{bot_username}?start={container_msg.id}"
+                result_message += f"🔗 *Download Link:* `{share_link}`\n"
                 result_message += f"📦 *Contains {len(state['files'])} items*"
 
                 await message.reply(
@@ -331,7 +322,6 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
-            # Send broadcast to all users
             success = 0
             failed = 0
             total = len(user_database)
@@ -436,30 +426,48 @@ async def set_commands():
         BotCommand("broadcast", "Send message to all users (Owner)"),
     ])
 
-# Initialize and run the bot
 async def main():
-    await app.start()
-    print("Bot started!")
-    await set_commands()
-    
-    # Verify storage channel access
     try:
-        test_msg = await app.send_message(STORAGE_CHANNEL, "Bot started and storage channel verified!")
-        await test_msg.delete()
-        logger.info("Storage channel access verified successfully")
+        await app.start()
+        print("Bot started successfully!")
+        
+        # Verify storage channel access
+        try:
+            test_msg = await app.send_message(
+                chat_id=STORAGE_CHANNEL,
+                text="Bot started and storage channel verified!"
+            )
+            await test_msg.delete()
+            logger.info("Storage channel access verified successfully")
+        except Exception as e:
+            logger.error(f"Failed to access storage channel: {e}")
+            print("CRITICAL: Could not access storage channel. Please ensure:")
+            print("1. The channel ID is correct (with -100 prefix)")
+            print("2. The bot is added as admin in the channel")
+            print("3. The channel is not deleted or restricted")
+            await app.stop()
+            return
+        
+        await set_commands()
+        
+        # Keep the bot running
+        await asyncio.Event().wait()
+        
     except Exception as e:
-        logger.error(f"Failed to access storage channel: {e}")
-        print("CRITICAL: Could not access storage channel. Please ensure:")
-        print("1. The channel ID is correct (with -100 prefix)")
-        print("2. The bot is added as admin in the channel")
-        print("3. The channel is not deleted or restricted")
-        await app.stop()
-        return
-    
-    await asyncio.Event().wait()
+        logger.error(f"Bot crashed: {e}")
+    finally:
+        if 'app' in locals() and app.is_connected:
+            await app.stop()
+            print("Bot stopped gracefully")
 
 if __name__ == "__main__":
+    # Create a new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
-        asyncio.run(main())
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
-        print("Bot stopped!")
+        print("Bot stopped by user")
+    finally:
+        loop.close()
