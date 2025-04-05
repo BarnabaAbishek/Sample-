@@ -5,8 +5,6 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from datetime import datetime
-import requests
-import urllib.parse
 
 # Configure logging
 logging.basicConfig(
@@ -20,12 +18,10 @@ BOT_TOKEN = "8047171670:AAE6F8uClZBXD33HozUeAUAe2USxNWMyu50"
 API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
-SHORTENER_API = "3884abaadd7698d75583946b89a88d7430594432"
-SHORTENER_URL = "https://api.gplinks.com/api"
 
-# Channel information - FIXED FORMAT
-SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
-STORAGE_CHANNEL = -1002585582507  # Using "me" sends to saved messages, or use a valid channel ID
+# Channel information
+SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Without @
+STORAGE_CHANNEL = -1002585582507  # Your private channel ID where bot is admin
 
 app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
@@ -54,13 +50,14 @@ async def store_file_in_channel(client, file_data):
     try:
         if file_data["file_type"] == "text":
             message = await client.send_message(
-                STORAGE_CHANNEL,
-                file_data["file_name"]
+                chat_id=STORAGE_CHANNEL,
+                text=file_data["file_name"]
             )
         else:
-            message = await getattr(client, f"send_{file_data['file_type']}")(
-                STORAGE_CHANNEL,
-                file_data["file_id"],
+            send_method = getattr(client, f"send_{file_data['file_type']}")
+            message = await send_method(
+                chat_id=STORAGE_CHANNEL,
+                file_id=file_data["file_id"],
                 caption=file_data.get("caption")
             )
         return message.id
@@ -71,46 +68,37 @@ async def store_file_in_channel(client, file_data):
 async def get_file_from_channel(client, message_id):
     """Retrieve file from storage channel"""
     try:
-        return await client.get_messages(STORAGE_CHANNEL, message_id)
+        return await client.get_messages(
+            chat_id=STORAGE_CHANNEL,
+            message_ids=message_id
+        )
     except Exception as e:
         logger.error(f"Error retrieving file from channel: {e}")
         raise
 
-def shorten_url(long_url):
-    """Shorten a URL using GPLinks API"""
-    try:
-        encoded_url = urllib.parse.quote_plus(long_url)
-        params = {
-            'api': SHORTENER_API,
-            'url': encoded_url,
-            'format': 'json'
-        }
-        
-        response = requests.get(SHORTENER_URL, params=params, timeout=10)
-        response_data = response.json()
-        
-        if response.status_code == 200 and response_data.get("status") == "success":
-            return response_data.get("shortenedUrl")
-        return None
-            
-    except Exception as e:
-        logger.error(f"Error shortening URL: {e}")
-        return None
-
 async def check_user_joined_channel(client, user_id):
     """Check if user has joined the required channel"""
     try:
-        # Alternative method that doesn't require admin privileges
+        # Try to get chat member (requires bot to be admin)
         try:
-            chat = await client.get_chat(SOURCE_CHANNEL)
-            invite_link = chat.invite_link
-            return True
-        except:
-            # If we can't get invite link, use a different approach
+            member = await client.get_chat_member(SOURCE_CHANNEL, user_id)
+            return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
+        except Exception as admin_error:
+            logger.warning(f"Admin check failed, trying alternative method: {admin_error}")
+            
+            # Alternative method using invite links
             try:
-                await client.join_chat(SOURCE_CHANNEL)
-                return True
-            except:
+                chat = await client.get_chat(SOURCE_CHANNEL)
+                if chat.invite_link:
+                    # Try to join (will fail if already member)
+                    try:
+                        await client.join_chat(chat.invite_link)
+                        return True
+                    except:
+                        # If join fails, assume already member
+                        return True
+            except Exception as e:
+                logger.error(f"Alternative check failed: {e}")
                 return False
     except Exception as e:
         logger.error(f"Error checking channel membership: {e}")
@@ -120,9 +108,8 @@ async def check_user_joined_channel(client, user_id):
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
-    user_database.add(user.id)  # Add user to broadcast database
+    user_database.add(user.id)
     
-    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user.id)
     
     image_id = "AgACAgUAAxkBAAMJZ_CtleL6YOgZ07mHjUFGm74AAXSZAAI0xDEbSH-BV_h91mGMeTcBAAgBAAMCAAN4AAceBA"
@@ -130,7 +117,7 @@ async def start(client, message):
     if len(message.command) == 1:
         if not has_joined:
             join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=SOURCE_CHANNEL)
+                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}")
             ]])
             
             caption = f"""
@@ -151,7 +138,7 @@ async def start(client, message):
             caption = f"""
 *Hᴇʟʟᴏ {user.first_name}*
 
-*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ]({SOURCE_CHANNEL})
+*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ](https://t.me/{SOURCE_CHANNEL})
             """
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -165,7 +152,7 @@ async def start(client, message):
         
         if not has_joined:
             join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=SOURCE_CHANNEL),
+                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}"),
                 InlineKeyboardButton("📥 Get File", callback_data=f"getfile_{unique_id}")
             ]])
             
@@ -206,7 +193,6 @@ async def handle_getfile(client, callback_query):
     user_id = callback_query.from_user.id
     message_id = int(callback_query.data.split("_")[1])
     
-    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user_id)
     
     if not has_joined:
@@ -237,7 +223,7 @@ async def batch_command(client, message):
     await message.reply(
         "📤 *Batch Upload Mode Activated!*\n\n"
         "Send me multiple files (documents, videos, photos, audio, or text).\n"
-        "When finished, send /done to generate links.\n"
+        "When finished, send /done to generate a single link for all files.\n"
         "To cancel, send /cancel.",
         parse_mode=enums.ParseMode.MARKDOWN
     )
@@ -281,24 +267,62 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
+            # Store all files and create a single message with all file links
             bot_username = (await client.get_me()).username
-            result_message = "✅ *Batch Upload Complete!*\n\n"
-
-            for file_data in state["files"]:
-                try:
-                    message_id = await store_file_in_channel(client, file_data)
-                    share_link = f"https://t.me/{bot_username}?start={message_id}"
-                    short_link = shorten_url(share_link) or share_link
+            result_message = "📦 *Batch Upload Complete!*\n\n"
+            result_message += "🔗 *Single Download Link:*\n"
+            
+            # Create a message containing all files
+            try:
+                if len(state["files"]) == 1:
+                    # Single file - just forward it
+                    file_data = state["files"][0]
+                    if file_data["file_type"] == "text":
+                        msg = await client.send_message(STORAGE_CHANNEL, file_data["file_name"])
+                    else:
+                        send_method = getattr(client, f"send_{file_data['file_type']}")
+                        msg = await send_method(
+                            STORAGE_CHANNEL,
+                            file_data["file_id"],
+                            caption=file_data.get("caption")
+                        )
+                    message_id = msg.id
+                else:
+                    # Multiple files - send as media group if possible
+                    media_group = []
+                    for file_data in state["files"]:
+                        if file_data["file_type"] in ["photo", "video"]:
+                            media_group.append((
+                                enums.MessageMediaType(file_data["file_type"].upper()),
+                                file_data["file_id"],
+                                {"caption": file_data.get("caption")}
+                            ))
                     
-                    result_message += f"📄 *File*: {file_data.get('file_name', 'Unnamed')}\n"
-                    result_message += f"🔗 Link: `{short_link}`\n\n"
-                except Exception as e:
-                    result_message += f"❌ Error uploading file: {e}\n\n"
+                    if media_group:
+                        # Send as media group
+                        sent_messages = await client.send_media_group(STORAGE_CHANNEL, media_group)
+                        message_id = sent_messages[0].id
+                    else:
+                        # Fallback to text message with file links
+                        text_content = "\n\n".join(
+                            f"📄 {file.get('file_name', 'File')}" 
+                            for file in state["files"]
+                        )
+                        msg = await client.send_message(STORAGE_CHANNEL, text_content)
+                        message_id = msg.id
+                
+                # Generate single share link
+                share_link = f"https://t.me/{bot_username}?start={message_id}"
+                result_message += f"`{share_link}`\n\n"
+                result_message += f"📦 *Contains {len(state['files'])} items*"
 
-            await message.reply(
-                result_message,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+                await message.reply(
+                    result_message,
+                    parse_mode=enums.ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                await message.reply(f"❌ Error creating batch: {e}")
+            
             user_states.pop(user_id, None)
 
         elif state["mode"] == "broadcast":
@@ -348,7 +372,6 @@ async def handle_actions(client, message):
                     failed += 1
                     logger.error(f"Error broadcasting to {user_id}: {e}")
                 
-                # Small delay to avoid flooding
                 await asyncio.sleep(0.1)
             
             await status_msg.edit_text(
@@ -376,11 +399,15 @@ async def media_text_handler(client, message):
                 "caption": None
             }
             state["files"].append(file_data)
-            await message.reply(f"✅ Text added to batch! Total files: {len(state['files'])}\nSend /done when ready.")
+            await message.reply(f"✅ Text added to batch! Total items: {len(state['files'])}\nSend /done when ready.")
         
         elif media := get_media_info(message):
             state["files"].append(media)
-            await message.reply(f"✅ Media added to batch! Total files: {len(state['files'])}\nSend /done when ready.")
+            reply_text = f"✅ Media added to batch! Total items: {len(state['files'])}"
+            if media["caption"]:
+                reply_text += f"\nCaption: {media['caption']}"
+            reply_text += "\nSend /done when ready."
+            await message.reply(reply_text)
 
     elif state["mode"] == "broadcast":
         if message.text and not message.text.startswith('/'):
@@ -396,7 +423,11 @@ async def media_text_handler(client, message):
                 "file_id": media["file_id"],
                 "caption": media["caption"]
             })
-            await message.reply(f"✅ Media added to broadcast!\nSend /done when ready.")
+            reply_text = f"✅ Media added to broadcast!"
+            if media["caption"]:
+                reply_text += f"\nCaption: {media['caption']}"
+            reply_text += "\nSend /done when ready."
+            await message.reply(reply_text)
 
 async def set_commands():
     await app.set_bot_commands([
@@ -405,11 +436,30 @@ async def set_commands():
         BotCommand("broadcast", "Send message to all users (Owner)"),
     ])
 
-app.start()
-print("Bot started!")
-app.loop.run_until_complete(set_commands())
+# Initialize and run the bot
+async def main():
+    await app.start()
+    print("Bot started!")
+    await set_commands()
+    
+    # Verify storage channel access
+    try:
+        test_msg = await app.send_message(STORAGE_CHANNEL, "Bot started and storage channel verified!")
+        await test_msg.delete()
+        logger.info("Storage channel access verified successfully")
+    except Exception as e:
+        logger.error(f"Failed to access storage channel: {e}")
+        print("CRITICAL: Could not access storage channel. Please ensure:")
+        print("1. The channel ID is correct (with -100 prefix)")
+        print("2. The bot is added as admin in the channel")
+        print("3. The channel is not deleted or restricted")
+        await app.stop()
+        return
+    
+    await asyncio.Event().wait()
 
-try:
-    asyncio.get_event_loop().run_forever()
-except KeyboardInterrupt:
-    print("Bot stopped!")
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped!")
