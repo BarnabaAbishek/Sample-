@@ -14,16 +14,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-API_ID = YOUR_API_ID
-API_HASH = "YOUR_API_HASH"
-OWNER_IDS = [YOUR_OWNER_ID]  # Replace with your Telegram ID
+BOT_TOKEN = "8047171670:AAE6F8uClZBXD33HozUeAUAe2USxNWMyu50"
+API_ID = 24360857
+API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
+OWNER_IDS = [5891854177, 6611564855]
 
 # Channel information
-SOURCE_CHANNEL = "your_source_channel"  # Without @
-STORAGE_CHANNEL = "your_storage_channel"  # Without @ (or use ID if private)
+SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
+STORAGE_CHANNEL = "SoloLevelingStorage"  # Replace with your storage channel username or make sure bot is in the channel
 
-app = Client("FileSharingBot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
