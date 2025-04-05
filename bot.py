@@ -20,8 +20,6 @@ BOT_TOKEN = "8047171670:AAE6F8uClZBXD33HozUeAUAe2USxNWMyu50"
 API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
-SHORTENER_API = "3884abaadd7698d75583946b89a88d7430594432"
-SHORTENER_URL = "https://api.gplinks.com/api"
 
 # Channel information - FIXED FORMAT
 SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
@@ -76,27 +74,6 @@ async def get_file_from_channel(client, message_id):
         logger.error(f"Error retrieving file from channel: {e}")
         raise
 
-def shorten_url(long_url):
-    """Shorten a URL using GPLinks API"""
-    try:
-        encoded_url = urllib.parse.quote_plus(long_url)
-        params = {
-            'api': SHORTENER_API,
-            'url': encoded_url,
-            'format': 'json'
-        }
-        
-        response = requests.get(SHORTENER_URL, params=params, timeout=10)
-        response_data = response.json()
-        
-        if response.status_code == 200 and response_data.get("status") == "success":
-            return response_data.get("shortenedUrl")
-        return None
-            
-    except Exception as e:
-        logger.error(f"Error shortening URL: {e}")
-        return None
-
 async def check_user_joined_channel(client, user_id):
     """Check if user has joined the required channel"""
     try:
@@ -130,7 +107,7 @@ async def start(client, message):
     if len(message.command) == 1:
         if not has_joined:
             join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=SOURCE_CHANNEL)
+                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}")
             ]])
             
             caption = f"""
@@ -151,7 +128,7 @@ async def start(client, message):
             caption = f"""
 *Hᴇʟʟᴏ {user.first_name}*
 
-*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ]({SOURCE_CHANNEL})
+*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ](https://t.me/{SOURCE_CHANNEL})
             """
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -165,7 +142,7 @@ async def start(client, message):
         
         if not has_joined:
             join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=SOURCE_CHANNEL),
+                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}"),
                 InlineKeyboardButton("📥 Get File", callback_data=f"getfile_{unique_id}")
             ]])
             
@@ -237,7 +214,7 @@ async def batch_command(client, message):
     await message.reply(
         "📤 *Batch Upload Mode Activated!*\n\n"
         "Send me multiple files (documents, videos, photos, audio, or text).\n"
-        "When finished, send /done to generate links.\n"
+        "When finished, send /done to generate a single link for all files.\n"
         "To cancel, send /cancel.",
         parse_mode=enums.ParseMode.MARKDOWN
     )
@@ -282,23 +259,49 @@ async def handle_actions(client, message):
                 return
 
             bot_username = (await client.get_me()).username
-            result_message = "✅ *Batch Upload Complete!*\n\n"
-
-            for file_data in state["files"]:
-                try:
-                    message_id = await store_file_in_channel(client, file_data)
-                    share_link = f"https://t.me/{bot_username}?start={message_id}"
-                    short_link = shorten_url(share_link) or share_link
-                    
-                    result_message += f"📄 *File*: {file_data.get('file_name', 'Unnamed')}\n"
-                    result_message += f"🔗 Link: `{short_link}`\n\n"
-                except Exception as e:
-                    result_message += f"❌ Error uploading file: {e}\n\n"
-
-            await message.reply(
-                result_message,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
+            
+            # Store all files in a single message in the storage channel
+            try:
+                caption = "📦 *Batch Files Collection*\n\n"
+                for i, file_data in enumerate(state["files"], 1):
+                    caption += f"{i}. {file_data.get('file_name', 'Unnamed')}\n"
+                
+                # Store the caption message in the channel
+                message_id = await client.send_message(
+                    STORAGE_CHANNEL,
+                    caption
+                ).id
+                
+                # Store all files in the channel
+                for file_data in state["files"]:
+                    try:
+                        if file_data["file_type"] == "text":
+                            await client.send_message(
+                                STORAGE_CHANNEL,
+                                file_data["file_name"],
+                                reply_to_message_id=message_id
+                            )
+                        else:
+                            await getattr(client, f"send_{file_data['file_type']}")(
+                                STORAGE_CHANNEL,
+                                file_data["file_id"],
+                                caption=file_data.get("caption"),
+                                reply_to_message_id=message_id
+                            )
+                    except Exception as e:
+                        logger.error(f"Error storing file in batch: {e}")
+                
+                # Generate single share link
+                share_link = f"https://t.me/{bot_username}?start={message_id}"
+                
+                await message.reply(
+                    f"✅ *Batch Upload Complete!*\n\n"
+                    f"🔗 Single Link for all files:\n`{share_link}`",
+                    parse_mode=enums.ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                await message.reply(f"❌ Error creating batch: {e}")
+            
             user_states.pop(user_id, None)
 
         elif state["mode"] == "broadcast":
@@ -412,4 +415,4 @@ app.loop.run_until_complete(set_commands())
 try:
     asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
-    print("Bot stopped!")      
+    print("Bot stopped!")
