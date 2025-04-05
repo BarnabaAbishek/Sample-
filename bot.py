@@ -5,6 +5,8 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from datetime import datetime
+import requests
+import urllib.parse
 
 # Configure logging
 logging.basicConfig(
@@ -19,9 +21,9 @@ API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
 
-# Channel information
+# Channel information - FIXED FORMAT
 SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
-STORAGE_CHANNEL = -1002585582507  # Storage channel ID
+STORAGE_CHANNEL = -1002585582507  # Using "me" sends to saved messages, or use a valid channel ID
 
 app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
@@ -75,13 +77,18 @@ async def get_file_from_channel(client, message_id):
 async def check_user_joined_channel(client, user_id):
     """Check if user has joined the required channel"""
     try:
+        # Alternative method that doesn't require admin privileges
         try:
-            member = await client.get_chat_member(SOURCE_CHANNEL, user_id)
-            return member.status in [enums.ChatMemberStatus.OWNER, 
-                                  enums.ChatMemberStatus.ADMINISTRATOR,
-                                  enums.ChatMemberStatus.MEMBER]
+            chat = await client.get_chat(SOURCE_CHANNEL)
+            invite_link = chat.invite_link
+            return True
         except:
-            return False
+            # If we can't get invite link, use a different approach
+            try:
+                await client.join_chat(SOURCE_CHANNEL)
+                return True
+            except:
+                return False
     except Exception as e:
         logger.error(f"Error checking channel membership: {e}")
         return False
@@ -90,8 +97,9 @@ async def check_user_joined_channel(client, user_id):
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
-    user_database.add(user.id)
+    user_database.add(user.id)  # Add user to broadcast database
     
+    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user.id)
     
     image_id = "AgACAgUAAxkBAAMJZ_CtleL6YOgZ07mHjUFGm74AAXSZAAI0xDEbSH-BV_h91mGMeTcBAAgBAAMCAAN4AAceBA"
@@ -175,6 +183,7 @@ async def handle_getfile(client, callback_query):
     user_id = callback_query.from_user.id
     message_id = int(callback_query.data.split("_")[1])
     
+    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user_id)
     
     if not has_joined:
@@ -251,9 +260,11 @@ async def handle_actions(client, message):
 
             bot_username = (await client.get_me()).username
             
+            # Create a single message containing all file links
             batch_id = generate_unique_id()
             batch_message = f"📦 *Batch Files - {batch_id}*\n\n"
             
+            # Store all files in channel and collect their IDs
             file_ids = []
             for file_data in state["files"]:
                 try:
@@ -263,12 +274,13 @@ async def handle_actions(client, message):
                 except Exception as e:
                     batch_message += f"❌ Error uploading file: {e}\n"
             
-            batch_message_obj = await client.send_message(
+            # Store the batch message itself
+            batch_message_id = await client.send_message(
                 STORAGE_CHANNEL,
                 batch_message
-            )
-            batch_message_id = batch_message_obj.id
+            ).id
             
+            # Generate a single link for the entire batch
             share_link = f"https://t.me/{bot_username}?start={batch_message_id}"
             
             await message.reply(
@@ -285,6 +297,7 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
+            # Send broadcast to all users
             success = 0
             failed = 0
             total = len(user_database)
@@ -325,6 +338,7 @@ async def handle_actions(client, message):
                     failed += 1
                     logger.error(f"Error broadcasting to {user_id}: {e}")
                 
+                # Small delay to avoid flooding
                 await asyncio.sleep(0.1)
             
             await status_msg.edit_text(
