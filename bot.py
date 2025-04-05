@@ -21,9 +21,9 @@ API_ID = 24360857
 API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
 
-# Channel information - FIXED FORMAT
+# Channel information
 SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
-STORAGE_CHANNEL = -1002585582507  # Using "me" sends to saved messages, or use a valid channel ID
+STORAGE_CHANNEL = -1002585582507  # Storage channel ID
 
 app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
@@ -77,18 +77,11 @@ async def get_file_from_channel(client, message_id):
 async def check_user_joined_channel(client, user_id):
     """Check if user has joined the required channel"""
     try:
-        # Alternative method that doesn't require admin privileges
         try:
-            chat = await client.get_chat(SOURCE_CHANNEL)
-            invite_link = chat.invite_link
-            return True
-        except:
-            # If we can't get invite link, use a different approach
-            try:
-                await client.join_chat(SOURCE_CHANNEL)
-                return True
-            except:
-                return False
+            member = await client.get_chat_member(SOURCE_CHANNEL, user_id)
+            return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
+        except Exception:
+            return False
     except Exception as e:
         logger.error(f"Error checking channel membership: {e}")
         return False
@@ -97,11 +90,9 @@ async def check_user_joined_channel(client, user_id):
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
-    user_database.add(user.id)  # Add user to broadcast database
+    user_database.add(user.id)
     
-    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user.id)
-    
     image_id = "AgACAgUAAxkBAAMJZ_CtleL6YOgZ07mHjUFGm74AAXSZAAI0xDEbSH-BV_h91mGMeTcBAAgBAAMCAAN4AAceBA"
     
     if len(message.command) == 1:
@@ -183,7 +174,6 @@ async def handle_getfile(client, callback_query):
     user_id = callback_query.from_user.id
     message_id = int(callback_query.data.split("_")[1])
     
-    # Check if user has joined channel
     has_joined = await check_user_joined_channel(client, user_id)
     
     if not has_joined:
@@ -258,41 +248,37 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
-            bot_username = (await client.get_me()).username
-            
-            # Store all files in a single message in the storage channel
             try:
-                caption = "📦 *Batch Files Collection*\n\n"
-                for i, file_data in enumerate(state["files"], 1):
-                    caption += f"{i}. {file_data.get('file_name', 'Unnamed')}\n"
+                bot_username = (await client.get_me()).username
                 
-                # Store the caption message in the channel
-                message_id = await client.send_message(
+                # Create a batch message with all files
+                batch_message = await client.send_message(
                     STORAGE_CHANNEL,
-                    caption
-                ).id
+                    "📦 *Batch Files Collection*"
+                )
                 
-                # Store all files in the channel
+                # Send all files as replies to the batch message
                 for file_data in state["files"]:
                     try:
                         if file_data["file_type"] == "text":
                             await client.send_message(
                                 STORAGE_CHANNEL,
                                 file_data["file_name"],
-                                reply_to_message_id=message_id
+                                reply_to_message_id=batch_message.id
                             )
                         else:
                             await getattr(client, f"send_{file_data['file_type']}")(
                                 STORAGE_CHANNEL,
                                 file_data["file_id"],
                                 caption=file_data.get("caption"),
-                                reply_to_message_id=message_id
+                                reply_to_message_id=batch_message.id
                             )
                     except Exception as e:
                         logger.error(f"Error storing file in batch: {e}")
+                        continue
                 
                 # Generate single share link
-                share_link = f"https://t.me/{bot_username}?start={message_id}"
+                share_link = f"https://t.me/{bot_username}?start={batch_message.id}"
                 
                 await message.reply(
                     f"✅ *Batch Upload Complete!*\n\n"
@@ -300,7 +286,7 @@ async def handle_actions(client, message):
                     parse_mode=enums.ParseMode.MARKDOWN
                 )
             except Exception as e:
-                await message.reply(f"❌ Error creating batch: {e}")
+                await message.reply(f"❌ Error creating batch: {str(e)}")
             
             user_states.pop(user_id, None)
 
@@ -310,7 +296,6 @@ async def handle_actions(client, message):
                 user_states.pop(user_id, None)
                 return
 
-            # Send broadcast to all users
             success = 0
             failed = 0
             total = len(user_database)
@@ -351,7 +336,6 @@ async def handle_actions(client, message):
                     failed += 1
                     logger.error(f"Error broadcasting to {user_id}: {e}")
                 
-                # Small delay to avoid flooding
                 await asyncio.sleep(0.1)
             
             await status_msg.edit_text(
