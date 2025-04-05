@@ -2,8 +2,9 @@ import asyncio
 import random
 import string
 from pyrogram import Client, filters, enums
-from pyrogram.types import BotCommand
+from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
+from datetime import datetime
 import requests
 import urllib.parse
 
@@ -21,32 +22,22 @@ API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
 SHORTENER_API = "3884abaadd7698d75583946b89a88d7430594432"
 SHORTENER_URL = "https://api.gplinks.com/api"
-SOURCE_CHANNEL = "https://t.me/solo_leveling_manhwa_tamil"
-STORAGE_CHANNEL = -1002585582507  # Make sure this is correct
 
-# Initialize the Client
-app = Client(
-    "SoloLevelingManhwaTamilBot",
-    bot_token=BOT_TOKEN,
-    api_id=API_ID,
-    api_hash=API_HASH
-)
+# Channel information
+SOURCE_CHANNEL = "https://t.me/solo_leveling_manhwa_tamil"
+
+# Storage channel (private channel where files will be stored)
+STORAGE_CHANNEL = -1002585582507  # Replace with your private channel ID
+
+app = Client("Solo Leveling Manhwa tamil", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
 
-async def debug_channel_access():
-    """Debug function to check channel access"""
-    try:
-        chat = await app.get_chat(STORAGE_CHANNEL)
-        logger.info(f"Channel access successful. Channel info: {chat}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to access channel: {e}")
-        return False
+def generate_unique_id():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
 def get_media_info(message):
-    """Extract media information from message"""
     for media_type in ["document", "video", "photo", "audio"]:
         if media := getattr(message, media_type, None):
             return {
@@ -59,153 +50,197 @@ def get_media_info(message):
             }
     return None
 
-async def store_file_in_channel(file_data):
+async def store_file_in_channel(client, file_data):
     """Store file in private channel and return message ID"""
     try:
-        if not await debug_channel_access():
-            raise Exception("Cannot access storage channel")
-
         if file_data["file_type"] == "text":
-            msg = await app.send_message(STORAGE_CHANNEL, file_data["file_name"])
+            message = await client.send_message(
+                STORAGE_CHANNEL,
+                file_data["file_name"]
+            )
         else:
-            send_func = getattr(app, f"send_{file_data['file_type']}")
-            msg = await send_func(
+            message = await getattr(client, f"send_{file_data['file_type']}")(
                 STORAGE_CHANNEL,
                 file_data["file_id"],
                 caption=file_data.get("caption")
             )
-        return msg.id
+        return message.id
     except Exception as e:
-        logger.error(f"Error storing file: {e}")
+        logger.error(f"Error storing file in channel: {e}")
         raise
 
-async def get_file_from_channel(message_id):
+async def get_file_from_channel(client, message_id):
     """Retrieve file from storage channel"""
     try:
-        return await app.get_messages(STORAGE_CHANNEL, message_id)
+        return await client.get_messages(STORAGE_CHANNEL, message_id)
     except Exception as e:
-        logger.error(f"Error retrieving file: {e}")
+        logger.error(f"Error retrieving file from channel: {e}")
         raise
 
 def shorten_url(long_url):
-    """Shorten URL using GPLinks API"""
+    """Shorten a URL using GPLinks API"""
     try:
+        encoded_url = urllib.parse.quote_plus(long_url)
         params = {
             'api': SHORTENER_API,
-            'url': urllib.parse.quote_plus(long_url),
+            'url': encoded_url,
             'format': 'json'
         }
+        
         response = requests.get(SHORTENER_URL, params=params, timeout=10)
-        if response.status_code == 200 and (data := response.json()).get("status") == "success":
-            return data.get("shortenedUrl")
+        response_data = response.json()
+        
+        if response.status_code == 200 and response_data.get("status") == "success":
+            return response_data.get("shortenedUrl")
+        return None
+            
     except Exception as e:
-        logger.error(f"URL shortening failed: {e}")
-    return None
+        logger.error(f"Error shortening URL: {e}")
+        return None
 
-async def set_bot_commands():
-    """Set bot commands menu"""
-    commands = [
-        BotCommand("start", "Show start message"),
-        BotCommand("batch", "Upload files (Owner)"),
-    ]
-    await app.set_bot_commands(commands)
-    logger.info("Bot commands set successfully")
-
+# Command Handlers
 @app.on_message(filters.command("start"))
-async def start_handler(client, message):
-    """Handle /start command"""
-    try:
-        if len(message.command) > 1:
-            # Handle file access via start parameter
-            file_id = message.command[1]
-            try:
-                msg = await get_file_from_channel(int(file_id))
-                await msg.copy(message.chat.id)
-            except:
-                await message.reply("⚠️ File not found or inaccessible")
-            return
+async def start(client, message):
+    user = message.from_user
+    
+    image_id = "AgACAgUAAxkBAAMJZ_CtleL6YOgZ07mHjUFGm74AAXSZAAI0xDEbSH-BV_h91mGMeTcBAAgBAAMCAAN4AAceBA"
+    
+    if len(message.command) == 1:
+        caption = f"""
+*Hᴇʟʟᴏ {user.first_name}*
 
-        # Regular start message
-        await message.reply(
-            f"Hello {message.from_user.first_name}!\n\n"
-            f"I'm a file sharing bot for Solo Leveling Manhwa Tamil.\n"
-            f"Source: {SOURCE_CHANNEL}",
-            disable_web_page_preview=True
+*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ]({SOURCE_CHANNEL})
+        """
+        await client.send_photo(
+            chat_id=message.chat.id,
+            photo=image_id,
+            caption=caption,
+            parse_mode=enums.ParseMode.MARKDOWN
         )
+    
+    elif len(message.command) > 1:
+        unique_id = message.command[1]
+        try:
+            # Retrieve file from storage channel
+            message_id = int(unique_id)
+            stored_message = await get_file_from_channel(client, message_id)
+            
+            if stored_message.text:
+                await client.send_message(message.chat.id, stored_message.text)
+            elif stored_message.document:
+                await stored_message.copy(message.chat.id)
+            elif stored_message.video:
+                await stored_message.copy(message.chat.id)
+            elif stored_message.photo:
+                await stored_message.copy(message.chat.id)
+            elif stored_message.audio:
+                await stored_message.copy(message.chat.id)
+        except Exception as e:
+            await message.reply("❌ Failed to retrieve file. It may have been deleted.")
+
+@app.on_callback_query(filters.regex("^getfile_"))
+async def handle_getfile(client, callback_query):
+    user_id = callback_query.from_user.id
+    message_id = int(callback_query.data.split("_")[1])
+    
+    try:
+        stored_message = await get_file_from_channel(client, message_id)
+        await callback_query.message.delete()
+        
+        if stored_message.text:
+            await client.send_message(callback_query.message.chat.id, stored_message.text)
+        elif stored_message.document:
+            await stored_message.copy(callback_query.message.chat.id)
+        elif stored_message.video:
+            await stored_message.copy(callback_query.message.chat.id)
+        elif stored_message.photo:
+            await stored_message.copy(callback_query.message.chat.id)
+        elif stored_message.audio:
+            await stored_message.copy(callback_query.message.chat.id)
     except Exception as e:
-        logger.error(f"Start handler error: {e}")
+        await callback_query.answer("❌ File not found or deleted!", show_alert=True)
 
 @app.on_message(filters.command("batch") & filters.user(OWNER_IDS))
-async def batch_handler(client, message):
-    """Handle batch upload initialization"""
-    user_states[message.from_user.id] = {"mode": "batch"}
+async def batch_command(client, message):
+    user_id = message.from_user.id
+    user_states[user_id] = {"mode": "batch"}
     await message.reply(
-        "📤 Batch upload mode activated!\n"
-        "Send me files or text messages to store.\n"
-        "Use /cancel to exit this mode."
+        "📤 *File Upload Mode Activated!*\n\n"
+        "Send me a file (document, video, photo, audio, or text).\n"
+        "I will generate a shareable link for it.\n"
+        "To cancel, send /cancel.",
+        parse_mode=enums.ParseMode.MARKDOWN
     )
 
-@app.on_message(filters.command("cancel") & filters.user(OWNER_IDS))
-async def cancel_handler(client, message):
-    """Cancel current operation"""
-    user_states.pop(message.from_user.id, None)
-    await message.reply("❌ Operation cancelled")
+@app.on_message(filters.private & ~filters.user(OWNER_IDS) & ~filters.command("start"))
+async def reject_messages(client, message):
+    await message.reply("❌ Don't Send Me Messages Directly. I'm Only a File Sharing Bot!")
+
+@app.on_message(filters.command(["done", "cancel"]) & filters.user(OWNER_IDS))
+async def handle_actions(client, message):
+    user_id = message.from_user.id
+    if user_id not in user_states:
+        await message.reply("❌ No active operation to complete or cancel.")
+        return
+
+    action = message.command[0]
+
+    if action == "cancel":
+        user_states.pop(user_id, None)
+        await message.reply("❌ Operation canceled.")
+        return
 
 @app.on_message(filters.private & (filters.media | filters.text) & filters.user(OWNER_IDS))
-async def media_handler(client, message):
-    """Handle media/files from owners"""
+async def media_text_handler(client, message):
     user_id = message.from_user.id
-    if user_states.get(user_id, {}).get("mode") != "batch":
+    state = user_states.get(user_id, {})
+
+    if not state or state.get("mode") != "batch":
+        return
+
+    if message.text and not message.text.startswith('/'):
+        file_data = {
+            "file_id": None, 
+            "file_name": message.text, 
+            "file_type": "text",
+            "caption": None
+        }
+    elif media := get_media_info(message):
+        file_data = media
+    else:
         return
 
     try:
-        if message.text and not message.text.startswith('/'):
-            file_data = {
-                "file_type": "text",
-                "file_name": message.text,
-                "file_id": None,
-                "caption": None
-            }
-        else:
-            file_data = get_media_info(message)
-            if not file_data:
-                return
-
-        # Store the file
-        file_id = await store_file_in_channel(file_data)
-        bot_username = (await app.get_me()).username
-        share_link = f"https://t.me/{bot_username}?start={file_id}"
-        short_url = shorten_url(share_link) or share_link
-
+        # Store file in private channel
+        message_id = await store_file_in_channel(client, file_data)
+        
+        # Generate shareable link
+        bot_username = (await client.get_me()).username
+        share_link = f"https://t.me/{bot_username}?start={message_id}"
+        short_link = shorten_url(share_link) or share_link
+        
         await message.reply(
-            f"✅ File stored successfully!\n\n"
-            f"🔗 Permanent Link: {share_link}\n"
-            f"🔗 Short URL: {short_url}"
+            f"✅ *File Upload Complete!*\n\n"
+            f"🔗 Permanent Link: `{share_link}`\n"
+            f"🪄 Short Link: `{short_link}`",
+            parse_mode=enums.ParseMode.MARKDOWN
         )
+        
+        user_states.pop(user_id, None)
     except Exception as e:
-        await message.reply(f"❌ Error: {str(e)}")
-        logger.error(f"Media handler error: {e}")
+        await message.reply(f"❌ Error uploading file: {e}")
 
-async def main():
-    """Main async function to run the bot"""
-    await app.start()
-    logger.info("Bot started successfully")
-    await set_bot_commands()
-    
-    # Keep the bot running
-    while True:
-        await asyncio.sleep(1)
+async def set_commands():
+    await app.set_bot_commands([
+        BotCommand("start", "Show start message"),
+        BotCommand("batch", "Upload files (Owner)"),
+    ])
 
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-    finally:
-        loop.run_until_complete(app.stop())
-        loop.close()
+app.start()
+print("Bot started!")
+app.loop.run_until_complete(set_commands())
+
+try:
+    asyncio.get_event_loop().run_forever()
+except KeyboardInterrupt:
+    print("Bot stopped!")
