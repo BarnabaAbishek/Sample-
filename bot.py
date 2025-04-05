@@ -20,8 +20,8 @@ API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177, 6611564855]
 
 # Channel information
-SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
-STORAGE_CHANNEL = "SoloLevelingStorage"  # Replace with your storage channel username or make sure bot is in the channel
+SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Without @
+STORAGE_CHANNEL = "SoloLevelingStorage"  # Use username or make sure bot is admin in channel
 
 app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
@@ -111,23 +111,25 @@ async def start(client, message):
     
     has_joined = await check_user_joined_channel(client, user.id)
     
+    image_id = "AgACAgUAAxkBAAMJZ_CtleL6YOgZ07mHjUFGm74AAXSZAAI0xDEbSH-BV_h91mGMeTcBAAgBAAMCAAN4AAceBA"
+    
     if len(message.command) == 1:
         if not has_joined:
             join_button = InlineKeyboardMarkup([[
                 InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}")
             ]])
             
-            await message.reply(
-                f"Hello {user.first_name}!\n\n"
-                "You must join our channel to access the files.\n"
-                "Please join the channel below:",
+            await client.send_photo(
+                chat_id=message.chat.id,
+                photo=image_id,
+                caption=f"Hello {user.first_name}!\n\nYou must join our channel to access the files.",
                 reply_markup=join_button
             )
         else:
-            await message.reply(
-                f"Hello {user.first_name}!\n\n"
-                f"I'm a file sharing bot for [our channel](https://t.me/{SOURCE_CHANNEL}).\n"
-                "Use the shared links to access files."
+            await client.send_photo(
+                chat_id=message.chat.id,
+                photo=image_id,
+                caption=f"Hello {user.first_name}!\n\nI'm a file sharing bot for [our channel](https://t.me/{SOURCE_CHANNEL})."
             )
     
     elif len(message.command) > 1:
@@ -139,10 +141,10 @@ async def start(client, message):
                 InlineKeyboardButton("📥 Get File", callback_data=f"getfile_{unique_id}")
             ]])
             
-            await message.reply(
-                f"Hello {user.first_name}!\n\n"
-                "You must join our channel to access this file.\n"
-                "Please join the channel below:",
+            await client.send_photo(
+                chat_id=message.chat.id,
+                photo=image_id,
+                caption=f"Hello {user.first_name}!\n\nYou must join our channel to access this file.",
                 reply_markup=join_button
             )
         else:
