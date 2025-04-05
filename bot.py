@@ -25,7 +25,7 @@ SHORTENER_URL = "https://api.gplinks.com/api"
 
 # Channel information - FIXED FORMAT
 SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
-STORAGE_CHANNEL = "me"  # Using "me" sends to saved messages, or use a valid channel ID
+STORAGE_CHANNEL = -1002585582507  # Using "me" sends to saved messages, or use a valid channel ID
 
 app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
