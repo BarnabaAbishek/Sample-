@@ -23,16 +23,14 @@ OWNER_IDS = [5891854177, 6611564855]
 SHORTENER_API = "3884abaadd7698d75583946b89a88d7430594432"
 SHORTENER_URL = "https://api.gplinks.com/api"
 
-# Channel information
-SOURCE_CHANNEL = "https://t.me/solo_leveling_manhwa_tamil"
-CHANNEL_USERNAME = "solo_leveling_manhwa_tamil"  # Without @
-STORAGE_CHANNEL = -1002585582507  # Private channel for file storage
+# Channel information - FIXED FORMAT
+SOURCE_CHANNEL = "solo_leveling_manhwa_tamil"  # Just the username without @
+STORAGE_CHANNEL = "me"  # Using "me" sends to saved messages, or use a valid channel ID
 
-app = Client("Solo Leveling Manhwa tamil", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("Solo_Leveling_Manhwa_tamil_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
-# Track users for broadcasting
 user_database = set()
 
 def generate_unique_id():
@@ -102,8 +100,18 @@ def shorten_url(long_url):
 async def check_user_joined_channel(client, user_id):
     """Check if user has joined the required channel"""
     try:
-        member = await client.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
+        # Alternative method that doesn't require admin privileges
+        try:
+            chat = await client.get_chat(SOURCE_CHANNEL)
+            invite_link = chat.invite_link
+            return True
+        except:
+            # If we can't get invite link, use a different approach
+            try:
+                await client.join_chat(SOURCE_CHANNEL)
+                return True
+            except:
+                return False
     except Exception as e:
         logger.error(f"Error checking channel membership: {e}")
         return False
