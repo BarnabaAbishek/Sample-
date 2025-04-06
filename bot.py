@@ -41,7 +41,7 @@ try:
     
     cred = credentials.Certificate(json.loads(firebase_config))
     firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://telegrambotdb-1895e-default-rtdb.firebaseio.com/"
+        "databaseURL": "https://my-telegram-bot-127da-default-rtdb.firebaseio.com"
     })
     logger.info("Firebase initialized successfully!")
 except Exception as e:
