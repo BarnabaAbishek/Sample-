@@ -99,6 +99,7 @@ async def start(client, message):
     has_joined = await check_channel_membership(client, user.id, REQUIRED_CHANNEL)
     
     image_id = "AgACAgUAAxkBAAIB5GfyOawwpZD9TlziQtEHwccx98qsAAIzwjEbs7aQV_IRtSBrISN8AAgBAAMCAAN4AAceBA"
+    image_id1 = "AgACAgUAAxkBAAICMWfyPdeBpVdBUzcaTvivBon4a-32AAI7wjEbs7aQVxPJtV8TqXdUAAgBAAMCAAN4AAceBA"
     
     join_button = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 JOIN CHANNEL", url=REQUIRED_CHANNEL_LINK)]
@@ -128,7 +129,7 @@ async def start(client, message):
             """
             await client.send_photo(
                 chat_id=message.chat.id,
-                photo=image_id,
+                photo=image_id1,
                 caption=caption,
                 parse_mode=enums.ParseMode.MARKDOWN
             )
