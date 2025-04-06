@@ -29,6 +29,7 @@ app = Client("tdafilesharebot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API
 
 # User state management
 user_states = {}
+file_storage = {}  # In-memory storage for file references
 
 def generate_unique_id():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
@@ -156,18 +157,16 @@ async def start(client, message):
                 parse_mode=enums.ParseMode.MARKDOWN
             )
         else:
-            # Check storage channel for the file
-            try:
-                async for msg in client.search_messages(STORAGE_CHANNEL_ID, query=unique_id):
-                    if msg.text and msg.text.startswith(f"FileID:{unique_id}"):
-                        file_data = eval(msg.text.split("FileData:")[1])
-                        await send_individual_file(client, message.chat.id, file_data["files"])
-                        return
-                
+            # Check in-memory storage for the file
+            if unique_id in file_storage:
+                try:
+                    file_data = file_storage[unique_id]
+                    await send_individual_file(client, message.chat.id, file_data["files"])
+                except Exception as e:
+                    logger.error(f"Error retrieving file: {e}")
+                    await message.reply("❌ Error retrieving file!")
+            else:
                 await message.reply("❌ File not found or expired!")
-            except Exception as e:
-                logger.error(f"Error retrieving file: {e}")
-                await message.reply("❌ Error retrieving file!")
 
 @app.on_callback_query(filters.regex("^getfile_"))
 async def handle_getfile(client, callback_query):
@@ -177,18 +176,16 @@ async def handle_getfile(client, callback_query):
     has_joined = await check_channel_membership(client, user_id, REQUIRED_CHANNEL)
     
     if has_joined:
-        try:
-            async for msg in client.search_messages(STORAGE_CHANNEL_ID, query=unique_id):
-                if msg.text and msg.text.startswith(f"FileID:{unique_id}"):
-                    file_data = eval(msg.text.split("FileData:")[1])
-                    await callback_query.message.delete()
-                    await send_individual_file(client, callback_query.message.chat.id, file_data["files"])
-                    return
-            
+        if unique_id in file_storage:
+            try:
+                file_data = file_storage[unique_id]
+                await callback_query.message.delete()
+                await send_individual_file(client, callback_query.message.chat.id, file_data["files"])
+            except Exception as e:
+                logger.error(f"Error retrieving file: {e}")
+                await callback_query.answer("❌ Error retrieving file!", show_alert=True)
+        else:
             await callback_query.answer("❌ File not found or expired!", show_alert=True)
-        except Exception as e:
-            logger.error(f"Error retrieving file: {e}")
-            await callback_query.answer("❌ Error retrieving file!", show_alert=True)
     else:
         await callback_query.answer("❌ Please join our channel first!", show_alert=True)
 
@@ -233,10 +230,13 @@ async def handle_actions(client, message):
             }
 
             try:
-                # Store in Telegram channel
+                # Store in memory
+                file_storage[unique_id] = file_data
+                
+                # Also store in channel for persistence (optional)
                 await client.send_message(
                     STORAGE_CHANNEL_ID,
-                    f"FileID:{unique_id}\nFileData:{file_data}"
+                    f"FileID:{unique_id}\nFiles:{len(file_data['files'])}"
                 )
             except Exception as e:
                 await message.reply(f"❌ Error saving file: {e}")
@@ -290,9 +290,41 @@ async def set_commands():
         BotCommand("batch", "Upload files (Owner)")
     ])
 
+@app.on_message(filters.chat(STORAGE_CHANNEL_ID) & filters.text)
+async def store_file_reference(client, message):
+    """Store file references from the storage channel"""
+    try:
+        if message.text.startswith("FileID:"):
+            parts = message.text.split("\n")
+            if len(parts) >= 2:
+                unique_id = parts[0].split(":")[1]
+                # We just store the message ID as reference
+                file_storage[unique_id] = {
+                    "message_id": message.id,
+                    "channel_id": STORAGE_CHANNEL_ID
+                }
+    except Exception as e:
+        logger.error(f"Error processing storage message: {e}")
+
+async def load_existing_files():
+    """Load existing file references from storage channel"""
+    try:
+        async for message in client.get_chat_history(STORAGE_CHANNEL_ID, limit=100):
+            if message.text and message.text.startswith("FileID:"):
+                parts = message.text.split("\n")
+                if len(parts) >= 2:
+                    unique_id = parts[0].split(":")[1]
+                    file_storage[unique_id] = {
+                        "message_id": message.id,
+                        "channel_id": STORAGE_CHANNEL_ID
+                    }
+    except Exception as e:
+        logger.error(f"Error loading existing files: {e}")
+
 app.start()
 print("Bot started!")
 app.loop.run_until_complete(set_commands())
+app.loop.run_until_complete(load_existing_files())
 
 try:
     asyncio.get_event_loop().run_forever()
