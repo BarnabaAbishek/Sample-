@@ -5,6 +5,7 @@ from pyrogram import Client, filters, enums
 from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 from datetime import datetime
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -14,71 +15,102 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-API_ID = 1234567
-API_HASH = "YOUR_API_HASH"
-OWNER_IDS = [12345678, 87654321]  # Replace with your owner IDs
+BOT_TOKEN = "8047171670:AAE6F8uClZBXD33HozUeAUAe2USxNWMyu50"
+API_ID = 24360857
+API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
+OWNER_IDS = [5891854177, 6611564855]
 
 # Channel information
-SOURCE_CHANNEL = "your_channel_username"  # Without @
-STORAGE_CHANNEL = -1001234567890  # Your storage channel ID
+STORAGE_CHANNEL_ID = -1002585582507  # Your private channel for file storage
+REQUIRED_CHANNEL = "@solo_leveling_manhwa_tamil"  # Only one required channel
+REQUIRED_CHANNEL_LINK = "https://t.me/solo_leveling_manhwa_tamil"
 
-app = Client("FileSharingBot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("tdafilesharebot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
-user_database = set()
 
 def generate_unique_id():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
 def get_media_info(message):
+    media_info = None
+    caption = message.caption if message.caption else None
+    
     for media_type in ["document", "video", "photo", "audio"]:
         if media := getattr(message, media_type, None):
-            return {
+            media_info = {
                 "file_id": media.file_id,
                 "file_name": getattr(media, "file_name", f"{media_type}_{media.file_id[:6]}"),
                 "file_type": media_type,
-                "caption": message.caption,
-                "mime_type": getattr(media, "mime_type", None),
-                "file_size": getattr(media, "file_size", None)
+                "caption": caption
             }
-    return None
+            break
+    
+    return media_info
 
-async def check_user_joined_channel(client, user_id):
-    """Check if user has joined the required channel"""
+async def check_channel_membership(client, user_id, channel):
     try:
-        try:
-            member = await client.get_chat_member(SOURCE_CHANNEL, user_id)
-            return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
-        except Exception as e:
-            logger.error(f"Error checking channel membership: {e}")
-            return False
+        member = await client.get_chat_member(channel, user_id)
+        return member.status not in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]
     except Exception as e:
-        logger.error(f"Error in check_user_joined_channel: {e}")
+        logger.error(f"Error checking channel {channel}: {e}")
         return False
+
+async def send_individual_file(client, chat_id, files):
+    for file in files:
+        try:
+            if file["file_type"] == "text":
+                await client.send_message(chat_id, file["file_name"])
+            else:
+                if file["file_type"] == "photo":
+                    await client.send_photo(
+                        chat_id=chat_id,
+                        photo=file["file_id"],
+                        caption=file.get("caption", None)
+                    )
+                elif file["file_type"] == "video":
+                    await client.send_video(
+                        chat_id=chat_id,
+                        video=file["file_id"],
+                        caption=file.get("caption", None)
+                    )
+                elif file["file_type"] == "document":
+                    await client.send_document(
+                        chat_id=chat_id,
+                        document=file["file_id"],
+                        caption=file.get("caption", None)
+                    )
+                elif file["file_type"] == "audio":
+                    await client.send_audio(
+                        chat_id=chat_id,
+                        audio=file["file_id"],
+                        caption=file.get("caption", None)
+                    )
+        except Exception as e:
+            logger.error(f"Error sending file: {e}")
+            await client.send_message(chat_id, f"Error sending file: {e}")
 
 # Command Handlers
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
-    user_database.add(user.id)
+    has_joined = await check_channel_membership(client, user.id, REQUIRED_CHANNEL)
     
-    has_joined = await check_user_joined_channel(client, user.id)
-    image_id = "YOUR_START_IMAGE_ID"  # Replace with your image ID
+    image_id = "AgACAgUAAxkBAAIB5GfyOawwpZD9TlziQtEHwccx98qsAAIzwjEbs7aQV_IRtSBrISN8AAgBAAMCAAN4AAceBA"
+    
+    join_button = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 JOIN CHANNEL", url=REQUIRED_CHANNEL_LINK)]
+    ])
     
     if len(message.command) == 1:
         if not has_joined:
-            join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}")
-            ]])
-            
             caption = f"""
-*Hello {user.first_name}*
+*Hᴇʟʟᴏ {user.first_name}*
 
-You must join our channel to access the files.
+*You must join our channel to get anime files*
 
-Please join the channel below:
+*Please join the channel below:*
             """
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -89,11 +121,9 @@ Please join the channel below:
             )
         else:
             caption = f"""
-*Hello {user.first_name}*
+*Hᴇʟʟᴏ {user.first_name}*
 
-I am a File Sharing Bot. I will give you files from our channel.
-
-Channel: @{SOURCE_CHANNEL}
+*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs*
             """
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -106,85 +136,77 @@ Channel: @{SOURCE_CHANNEL}
         unique_id = message.command[1]
         
         if not has_joined:
-            join_button = InlineKeyboardMarkup([[
-                InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{SOURCE_CHANNEL}"),
-                InlineKeyboardButton("📥 Get File", callback_data=f"getfile_{unique_id}")
-            ]])
-            
             caption = f"""
-*Hello {user.first_name}*
+*Hᴇʟʟᴏ {user.first_name}*
 
-You must join our channel to access this file.
+*You must join our channel to get this file*
 
-Please join the channel below:
+*Please join the channel below:*
             """
+            buttons = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📢 JOIN CHANNEL", url=REQUIRED_CHANNEL_LINK)],
+                [InlineKeyboardButton("📥 GET FILE", callback_data=f"getfile_{unique_id}")]
+            ])
+            
             await client.send_photo(
                 chat_id=message.chat.id,
                 photo=image_id,
                 caption=caption,
-                reply_markup=join_button,
+                reply_markup=buttons,
                 parse_mode=enums.ParseMode.MARKDOWN
             )
         else:
+            # Check storage channel for the file
             try:
-                # Get the batch message
-                batch_message = await client.get_messages(STORAGE_CHANNEL, int(unique_id))
+                async for msg in client.search_messages(STORAGE_CHANNEL_ID, query=unique_id):
+                    if msg.text and msg.text.startswith(f"FileID:{unique_id}"):
+                        file_data = eval(msg.text.split("FileData:")[1])
+                        await send_individual_file(client, message.chat.id, file_data["files"])
+                        return
                 
-                if not batch_message:
-                    await message.reply("❌ Batch not found!")
-                    return
-                
-                # Get all files in this batch (replies to the batch message)
-                batch_files = []
-                async for msg in client.get_chat_history(
-                    chat_id=STORAGE_CHANNEL,
-                    limit=100,
-                    offset_id=int(unique_id),
-                    reverse=True
-                ):
-                    if msg.reply_to_message_id == batch_message.id:
-                        batch_files.append(msg)
-                
-                if not batch_files:
-                    await message.reply("❌ No files found in this batch!")
-                    return
-                
-                # Send each file to user
-                for file_msg in batch_files:
-                    try:
-                        if file_msg.text:
-                            await client.send_message(message.chat.id, file_msg.text)
-                        elif file_msg.document:
-                            await file_msg.copy(message.chat.id)
-                        elif file_msg.video:
-                            await file_msg.copy(message.chat.id)
-                        elif file_msg.photo:
-                            await file_msg.copy(message.chat.id)
-                        elif file_msg.audio:
-                            await file_msg.copy(message.chat.id)
-                        # Small delay between files
-                        await asyncio.sleep(0.5)
-                    except Exception as e:
-                        logger.error(f"Error sending file: {e}")
-                        continue
-                
-                await message.reply("✅ All files have been sent!")
-                
+                await message.reply("❌ File not found or expired!")
             except Exception as e:
-                logger.error(f"Error in batch retrieval: {e}")
-                await message.reply("❌ Failed to retrieve files. They may have been deleted.")
+                logger.error(f"Error retrieving file: {e}")
+                await message.reply("❌ Error retrieving file!")
+
+@app.on_callback_query(filters.regex("^getfile_"))
+async def handle_getfile(client, callback_query):
+    user_id = callback_query.from_user.id
+    unique_id = callback_query.data.split("_")[1]
+    
+    has_joined = await check_channel_membership(client, user_id, REQUIRED_CHANNEL)
+    
+    if has_joined:
+        try:
+            async for msg in client.search_messages(STORAGE_CHANNEL_ID, query=unique_id):
+                if msg.text and msg.text.startswith(f"FileID:{unique_id}"):
+                    file_data = eval(msg.text.split("FileData:")[1])
+                    await callback_query.message.delete()
+                    await send_individual_file(client, callback_query.message.chat.id, file_data["files"])
+                    return
+            
+            await callback_query.answer("❌ File not found or expired!", show_alert=True)
+        except Exception as e:
+            logger.error(f"Error retrieving file: {e}")
+            await callback_query.answer("❌ Error retrieving file!", show_alert=True)
+    else:
+        await callback_query.answer("❌ Please join our channel first!", show_alert=True)
 
 @app.on_message(filters.command("batch") & filters.user(OWNER_IDS))
 async def batch_command(client, message):
     user_id = message.from_user.id
     user_states[user_id] = {"mode": "batch", "files": []}
     await message.reply(
-        "📤 Batch Upload Mode Activated!\n\n"
+        "📤 *Batch Mode Activated!*\n\n"
         "Send me multiple files (documents, videos, photos, audio, or text).\n"
-        "When finished, send /done to generate a single link for all files.\n"
+        "When finished, send /done to generate a link.\n"
         "To cancel, send /cancel.",
         parse_mode=enums.ParseMode.MARKDOWN
     )
+
+@app.on_message(filters.private & ~filters.user(OWNER_IDS) & ~filters.command("start"))
+async def reject_messages(client, message):
+    await message.reply("❌ Don't Send Me Messages Directly. I'm Only a File Sharing Bot!")
 
 @app.on_message(filters.command(["done", "cancel"]) & filters.user(OWNER_IDS))
 async def handle_actions(client, message):
@@ -196,64 +218,44 @@ async def handle_actions(client, message):
     state = user_states[user_id]
     action = message.command[0]
 
-    if action == "cancel":
-        user_states.pop(user_id, None)
-        await message.reply("❌ Operation canceled.")
-        return
-
     if action == "done":
         if state["mode"] == "batch":
             if not state["files"]:
-                await message.reply("❌ No files received! Operation canceled.")
+                await message.reply("❌ No files or text received! Batch canceled.")
                 user_states.pop(user_id, None)
                 return
 
+            unique_id = generate_unique_id()
+            file_data = {
+                "files": state["files"],
+                "uploaded_by": user_id,
+                "created_at": datetime.now().isoformat()
+            }
+
             try:
-                bot_username = (await client.get_me()).username
-                
-                # Create batch header message
-                batch_message = await client.send_message(
-                    STORAGE_CHANNEL,
-                    f"📦 Batch Files Collection\n\n"
-                    f"• Total files: {len(state['files'])}\n"
-                    f"• Created at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                )
-                
-                # Upload all files as replies
-                for file_data in state["files"]:
-                    try:
-                        if file_data["file_type"] == "text":
-                            await client.send_message(
-                                STORAGE_CHANNEL,
-                                file_data["file_name"],
-                                reply_to_message_id=batch_message.id
-                            )
-                        else:
-                            await getattr(client, f"send_{file_data['file_type']}")(
-                                STORAGE_CHANNEL,
-                                file_data["file_id"],
-                                caption=file_data.get("caption"),
-                                reply_to_message_id=batch_message.id
-                            )
-                        # Small delay between uploads
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        logger.error(f"Error uploading file: {e}")
-                        continue
-                
-                # Generate share link
-                share_link = f"https://t.me/{bot_username}?start={batch_message.id}"
-                
-                await message.reply(
-                    f"✅ Batch Upload Complete!\n\n"
-                    f"🔗 Share this link:\n`{share_link}`\n\n"
-                    f"Total files: {len(state['files'])}",
-                    parse_mode=enums.ParseMode.MARKDOWN
+                # Store in Telegram channel
+                await client.send_message(
+                    STORAGE_CHANNEL_ID,
+                    f"FileID:{unique_id}\nFileData:{file_data}"
                 )
             except Exception as e:
-                await message.reply(f"❌ Error creating batch: {str(e)}")
+                await message.reply(f"❌ Error saving file: {e}")
+                return
+
+            bot_username = (await client.get_me()).username
+            share_link = f"https://t.me/{bot_username}?start={unique_id}"
             
+            await message.reply(
+                f"✅ *Batch Upload Complete!*\n\n"
+                f"🔗 Share Link: `{share_link}`\n\n"
+                f"📌 Files will be stored permanently.",
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
             user_states.pop(user_id, None)
+    
+    elif action == "cancel":
+        user_states.pop(user_id, None)
+        await message.reply("❌ Operation canceled.")
 
 @app.on_message(filters.private & (filters.media | filters.text) & filters.user(OWNER_IDS))
 async def media_text_handler(client, message):
@@ -261,27 +263,31 @@ async def media_text_handler(client, message):
     state = user_states.get(user_id, {})
 
     if not state:
+        await message.reply("ℹ Please use /batch first to start uploading.")
         return
 
     if state["mode"] == "batch":
         if message.text and not message.text.startswith('/'):
-            file_data = {
+            state["files"].append({
                 "file_id": None, 
                 "file_name": message.text, 
                 "file_type": "text",
                 "caption": None
-            }
-            state["files"].append(file_data)
-            await message.reply(f"✅ Text added to batch! Total files: {len(state['files'])}\nSend /done when ready.")
+            })
+            await message.reply(f"✅ Text added to batch! Total items: {len(state['files'])}\nSend /done when ready.")
         
         elif media := get_media_info(message):
             state["files"].append(media)
-            await message.reply(f"✅ Media added to batch! Total files: {len(state['files'])}\nSend /done when ready.")
+            reply_text = f"✅ Media added to batch! Total items: {len(state['files'])}"
+            if media["caption"]:
+                reply_text += f"\nCaption: {media['caption']}"
+            reply_text += "\nSend /done when ready."
+            await message.reply(reply_text)
 
 async def set_commands():
     await app.set_bot_commands([
         BotCommand("start", "Show start message"),
-        BotCommand("batch", "Upload multiple files (Owner)"),
+        BotCommand("batch", "Upload files (Owner)")
     ])
 
 app.start()
