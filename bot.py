@@ -19,36 +19,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-BOT_TOKEN = "8047171670:AAE6F8uClZBXD33HozUeAUAe2USxNWMyu50"
-API_ID = 24360857
-API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
-OWNER_IDS = [5891854177, 6611568855]
-SHORTENER_API = "d2d9a81c236ad681edfbb260cb315628df46cc38"
-SHORTENER_URL = "https://api.gplinks.com/api"
+# Configuration - Load from environment variables
+BOT_TOKEN = os.getenv("BOT_TOKEN", "your_default_bot_token")
+API_ID = int(os.getenv("API_ID", "24360857"))
+API_HASH = os.getenv("API_HASH", "your_api_hash")
+OWNER_IDS = [int(x) for x in os.getenv("OWNER_IDS", "5891854177).split(",")]
+SHORTENER_API = os.getenv("SHORTENER_API", "your_shortener_api")
+SHORTENER_URL = os.getenv("SHORTENER_URL", "https://api.gplinks.com/api")
 
-# Channel information (simplified to just one channel)
-CHANNEL_USERNAME = "@solo_leveling_manhwa_tamil"
-CHANNEL_ID = -1002662584633
-CHANNEL_LINK = "https://t.me/solo_leveling_manhwa_tamil"
-SOURCE_CHANNEL = "https://t.me/mangas_manhwas_tamil"
+# Channel information
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "@solo_leveling_manhwa_tamil")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1002662584633"))
+CHANNEL_LINK = os.getenv("CHANNEL_LINK", "https://t.me/solo_leveling_manhwa_tamil")
+SOURCE_CHANNEL = os.getenv("SOURCE_CHANNEL", "https://t.me/mangas_manhwas_tamil")
+
+# Media IDs
+START_IMAGE_ID = os.getenv("START_IMAGE_ID", "AgACAgUAAxkBAAIB5GfyOawwpZD9TlziQtEHwccx98qsAAIzwjEbs7aQV_IRtSBrISN8AAgBAAMCAAN4AAceBA")
+JOINED_IMAGE_ID = os.getenv("JOINED_IMAGE_ID", "AgACAgUAAxkBAAICMWfyPdeBpVdBUzcaTvivBon4a-32AAI7wjEbs7aQVxPJtV8TqXdUAAgBAAMCAAN4AAceBA")
 
 # Initialize Firebase
-try:
-    firebase_config = os.getenv("FIREBASE_CONFIG")
-    if not firebase_config:
-        raise ValueError("FIREBASE_CONFIG environment variable is not set!")
-    
-    cred = credentials.Certificate(json.loads(firebase_config))
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://telegrambotdb-1895e-default-rtdb.firebaseio.com/"
-    })
-    logger.info("Firebase initialized successfully!")
-except Exception as e:
-    logger.error(f"Firebase initialization error: {e}")
-    raise
+firebase_initialized = False
+if os.getenv("FIREBASE_CONFIG"):
+    try:
+        firebase_config = json.loads(os.getenv("FIREBASE_CONFIG"))
+        cred = credentials.Certificate(firebase_config)
+        firebase_admin.initialize_app(cred, {
+            "databaseURL": os.getenv("FIREBASE_DB_URL", "https://telegrambotdb-1895e-default-rtdb.firebaseio.com/")
+        })
+        firebase_initialized = True
+        logger.info("Firebase initialized successfully!")
+    except Exception as e:
+        logger.error(f"Firebase initialization error: {e}")
+else:
+    logger.warning("FIREBASE_CONFIG not set, Firebase features will be disabled")
 
-app = Client("tdafilesharebot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
+app = Client("file_share_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 # User state management
 user_states = {}
@@ -73,6 +78,9 @@ def get_media_info(message):
     return media_info
 
 async def store_user_info(user_id, username, first_name, last_name):
+    if not firebase_initialized:
+        return
+        
     try:
         db.reference(f"users/{user_id}").set({
             "username": username or "",
@@ -105,33 +113,25 @@ async def send_individual_file(client, chat_id, files):
             if file["file_type"] == "text":
                 await client.send_message(chat_id, file["file_name"])
             else:
-                if file["file_type"] == "photo":
-                    await client.send_photo(
-                        chat_id=chat_id,
-                        photo=file["file_id"],
-                        caption=file.get("caption", None)
-                    )
-                elif file["file_type"] == "video":
-                    await client.send_video(
-                        chat_id=chat_id,
-                        video=file["file_id"],
-                        caption=file.get("caption", None)
-                    )
-                elif file["file_type"] == "document":
-                    await client.send_document(
-                        chat_id=chat_id,
-                        document=file["file_id"],
-                        caption=file.get("caption", None)
-                    )
-                elif file["file_type"] == "audio":
-                    await client.send_audio(
-                        chat_id=chat_id,
-                        audio=file["file_id"],
-                        caption=file.get("caption", None)
-                    )
+                method = {
+                    "photo": client.send_photo,
+                    "video": client.send_video,
+                    "document": client.send_document,
+                    "audio": client.send_audio
+                }.get(file["file_type"])
+                
+                if method:
+                    kwargs = {
+                        "chat_id": chat_id,
+                        file["file_type"]: file["file_id"]
+                    }
+                    if file.get("caption"):
+                        kwargs["caption"] = file["caption"]
+                    
+                    await method(**kwargs)
         except Exception as e:
             logger.error(f"Error sending file: {e}")
-            await client.send_message(chat_id, f"Error sending file: {e}")
+            await client.send_message(chat_id, f"❌ Error sending file: {str(e)}")
 
 def shorten_url(long_url):
     try:
@@ -142,105 +142,125 @@ def shorten_url(long_url):
             'format': 'json'
         }
         response = requests.get(SHORTENER_URL, params=params, timeout=10)
-        try:
-            response_data = response.json()
-            if response.status_code == 200 and response_data.get("status") == "success":
-                return response_data.get("shortenedUrl")
-            else:
-                error_msg = response_data.get("message", "Unknown error from GPLinks")
-                logger.error(f"GPLinks API error: {error_msg}")
-                return None
-        except ValueError:
-            logger.error("GPLinks API returned invalid JSON response")
-            return None
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error while shortening URL: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error shortening URL: {e}")
-        return None
+        response.raise_for_status()
+        response_data = response.json()
         
+        if response_data.get("status") == "success":
+            return response_data.get("shortenedUrl")
+        else:
+            error_msg = response_data.get("message", "Unknown error from GPLinks")
+            logger.error(f"GPLinks API error: {error_msg}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error shortening URL: {e}")
+        return None
+
+async def send_photo_or_text(client, chat_id, photo_id, text, reply_markup=None):
+    try:
+        if photo_id:
+            return await client.send_photo(
+                chat_id=chat_id,
+                photo=photo_id,
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+    except Exception as e:
+        logger.warning(f"Failed to send photo, falling back to text: {e}")
+    
+    return await client.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode=enums.ParseMode.MARKDOWN
+    )
+
 # Command Handlers
 @app.on_message(filters.command("start"))
 async def start(client, message):
     user = message.from_user
     await store_user_info(user.id, user.username, user.first_name, user.last_name)
     
-    # Show "Please wait" message
     wait_msg = await message.reply("⏳ Please wait while we process your request...")
     
-    has_joined = await is_user_joined(client, user.id)
-    image_id = "AgACAgUAAxkBAAIB5GfyOawwpZD9TlziQtEHwccx98qsAAIzwjEbs7aQV_IRtSBrISN8AAgBAAMCAAN4AAceBA"
-    image_id1 = "AgACAgUAAxkBAAICMWfyPdeBpVdBUzcaTvivBon4a-32AAI7wjEbs7aQVxPJtV8TqXdUAAgBAAMCAAN4AAceBA"
-    
-    if len(message.command) == 1:
-        if not has_joined:
-            caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
-
-*You must join our channel to get anime files*
-
-*Please join the channel below:*
-            """
-            buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 JOIN CHANNEL", url=CHANNEL_LINK)],
-                [InlineKeyboardButton("✅ I'VE JOINED", callback_data="check_join")]
-            ])
-            
-            await wait_msg.delete()
-            await client.send_photo(
-                chat_id=message.chat.id,
-                photo=image_id,
-                caption=caption,
-                reply_markup=buttons,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-        else:
-            caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
-
-*I Aᴍ File Sharing  Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ  Mangas and Manhwas Fɪʟᴇs Fʀᴏᴍ* [MAnga And  Manhwa Tamil ]({SOURCE_CHANNEL})
-            """
-            await wait_msg.delete()
-            await client.send_photo(
-                chat_id=message.chat.id,
-                photo=image_id1,
-                caption=caption,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-    
-    elif len(message.command) > 1:
-        unique_id = message.command[1]
+    try:
+        has_joined = await is_user_joined(client, user.id)
         
-        if not has_joined:
-            caption = f"""
-*Hᴇʟʟᴏ {user.first_name}*
+        if len(message.command) == 1:
+            if not has_joined:
+                caption = f"""
+*Hello {user.first_name}*
 
-*You must join our channel to get this file*
+You must join our channel to get manga/manhwa files.
 
-*Please join the channel below:*
-            """
-            buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 JOIN CHANNEL", url=CHANNEL_LINK)],
-                [InlineKeyboardButton("✅ GET FILE", callback_data=f"getfile_{unique_id}")]
-            ])
-            
-            await wait_msg.delete()
-            await client.send_photo(
-                chat_id=message.chat.id,
-                photo=image_id,
-                caption=caption,
-                reply_markup=buttons,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-        else:
-            file_data = db.reference(f"files/{unique_id}").get()
-            if file_data and not file_data.get("deleted"):
-                await wait_msg.edit_text("⏳ Preparing your file, please wait...")
-                await send_individual_file(client, message.chat.id, file_data["files"])
+📢 Please join: [Our Channel]({CHANNEL_LINK})
+                """
+                buttons = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📢 JOIN CHANNEL", url=CHANNEL_LINK)],
+                    [InlineKeyboardButton("✅ I'VE JOINED", callback_data="check_join")]
+                ])
+                
                 await wait_msg.delete()
+                await send_photo_or_text(
+                    client,
+                    message.chat.id,
+                    START_IMAGE_ID,
+                    caption,
+                    buttons
+                )
             else:
-                await wait_msg.edit_text("❌ File not found or deleted!")
+                caption = f"""
+*Hello {user.first_name}*
+
+I am a Manga/Manhwa sharing bot. I will give you files from [Manga/Manhwa Tamil]({SOURCE_CHANNEL})
+                """
+                await wait_msg.delete()
+                await send_photo_or_text(
+                    client,
+                    message.chat.id,
+                    JOINED_IMAGE_ID,
+                    caption
+                )
+        
+        elif len(message.command) > 1:
+            unique_id = message.command[1]
+            
+            if not has_joined:
+                caption = f"""
+*Hello {user.first_name}*
+
+You must join our channel to get this file.
+
+📢 Please join: [Our Channel]({CHANNEL_LINK})
+                """
+                buttons = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📢 JOIN CHANNEL", url=CHANNEL_LINK)],
+                    [InlineKeyboardButton("✅ GET FILE", callback_data=f"getfile_{unique_id}")]
+                ])
+                
+                await wait_msg.delete()
+                await send_photo_or_text(
+                    client,
+                    message.chat.id,
+                    START_IMAGE_ID,
+                    caption,
+                    buttons
+                )
+            else:
+                file_data = None
+                if firebase_initialized:
+                    file_data = db.reference(f"files/{unique_id}").get()
+                
+                if file_data and not file_data.get("deleted"):
+                    await wait_msg.edit_text("⏳ Preparing your file, please wait...")
+                    await send_individual_file(client, message.chat.id, file_data["files"])
+                    await wait_msg.delete()
+                else:
+                    await wait_msg.edit_text("❌ File not found or deleted!")
+    except Exception as e:
+        logger.error(f"Error in start handler: {e}")
+        await wait_msg.edit_text("❌ An error occurred. Please try again later.")
 
 @app.on_callback_query(filters.regex("^check_join$"))
 async def handle_check_join(client, callback_query):
@@ -249,30 +269,32 @@ async def handle_check_join(client, callback_query):
     
     wait_msg = await callback_query.message.reply("⏳ Please wait while we verify your channel membership...")
     
-    has_joined = await is_user_joined(client, user_id)
-    
-    if has_joined:
-        await wait_msg.edit_text("✅ Thank you for joining! Now you can access all files.")
-        await callback_query.message.delete()
+    try:
+        has_joined = await is_user_joined(client, user_id)
         
-        caption = f"""
-*Hᴇʟʟᴏ {callback_query.from_user.first_name}*
+        if has_joined:
+            await wait_msg.edit_text("✅ Thank you for joining! Now you can access all files.")
+            await callback_query.message.delete()
+            
+            caption = f"""
+*Hello {callback_query.from_user.first_name}*
 
-*I Aᴍ Aɴɪᴍᴇ Bᴏᴛ I Wɪʟʟ Gɪᴠᴇ Yᴏᴜ Aɴɪᴍᴇ Fɪʟᴇs Fʀᴏᴍ* [Tᴀᴍɪʟ Dubbed Aɴɪᴍᴇ]({SOURCE_CHANNEL})
-        """
-        image_id = "AgACAgUAAxkBAAMMZ-liXpvWGCRtUVvzNSmdX62f0jkAAknIMRvOgUBX60loZgKrC-kACAEAAwIAA3gABx4E"
-        
-        await client.send_photo(
-            chat_id=callback_query.message.chat.id,
-            photo=image_id,
-            caption=caption,
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-    else:
-        await wait_msg.edit_text("❌ You haven't joined our channel yet. Please join first!")
-    
-    await asyncio.sleep(5)
-    await wait_msg.delete()
+I am a Manga/Manhwa sharing bot. I will give you files from [Manga/Manhwa Tamil]({SOURCE_CHANNEL})
+            """
+            await send_photo_or_text(
+                client,
+                callback_query.message.chat.id,
+                JOINED_IMAGE_ID,
+                caption
+            )
+        else:
+            await wait_msg.edit_text("❌ You haven't joined our channel yet. Please join first!")
+    except Exception as e:
+        logger.error(f"Error in check_join handler: {e}")
+        await wait_msg.edit_text("❌ An error occurred. Please try again.")
+    finally:
+        await asyncio.sleep(5)
+        await wait_msg.delete()
 
 @app.on_callback_query(filters.regex("^getfile_"))
 async def handle_getfile(client, callback_query):
@@ -283,24 +305,28 @@ async def handle_getfile(client, callback_query):
     
     wait_msg = await callback_query.message.reply("⏳ Verifying your channel membership...")
     
-    has_joined = await is_user_joined(client, user_id)
-    
-    if has_joined:
-        file_data = db.reference(f"files/{unique_id}").get()
-        if file_data and not file_data.get("deleted"):
-            await wait_msg.edit_text("⏳ Preparing your file, please wait...")
-            await callback_query.message.delete()
-            await send_individual_file(client, callback_query.message.chat.id, file_data["files"])
+    try:
+        has_joined = await is_user_joined(client, user_id)
+        
+        if has_joined:
+            file_data = None
+            if firebase_initialized:
+                file_data = db.reference(f"files/{unique_id}").get()
+            
+            if file_data and not file_data.get("deleted"):
+                await wait_msg.edit_text("⏳ Preparing your file, please wait...")
+                await callback_query.message.delete()
+                await send_individual_file(client, callback_query.message.chat.id, file_data["files"])
+            else:
+                await wait_msg.edit_text("❌ File not found or deleted!")
         else:
-            await wait_msg.edit_text("❌ File not found or deleted!")
-    else:
-        await wait_msg.edit_text("❌ Please join our channel first!")
-    
-    await asyncio.sleep(5)
-    await wait_msg.delete()
-
-# [Rest of the code remains the same as your original...]
-# Only the channel-related parts were modified, other functions remain unchanged
+            await wait_msg.edit_text("❌ Please join our channel first!")
+    except Exception as e:
+        logger.error(f"Error in getfile handler: {e}")
+        await wait_msg.edit_text("❌ An error occurred. Please try again.")
+    finally:
+        await asyncio.sleep(5)
+        await wait_msg.delete()
 
 @app.on_message(filters.command("batch") & filters.user(OWNER_IDS))
 async def batch_command(client, message):
@@ -316,7 +342,7 @@ async def batch_command(client, message):
 
 @app.on_message(filters.private & ~filters.user(OWNER_IDS) & ~filters.command("start"))
 async def reject_messages(client, message):
-    await message.reply("❌ Don't Send Me Messages Directly. I'm Only a File Sharing Bot!")
+    await message.reply("❌ Don't send me messages directly. I'm only a file sharing bot!")
 
 @app.on_message(filters.command("broadcast") & filters.user(OWNER_IDS))
 async def broadcast_command(client, message):
@@ -332,6 +358,10 @@ async def broadcast_command(client, message):
 
 @app.on_message(filters.command("users") & filters.user(OWNER_IDS))
 async def list_users(client, message):
+    if not firebase_initialized:
+        await message.reply("❌ Firebase is not initialized. Cannot list users.")
+        return
+        
     try:
         users_ref = db.reference("users")
         users = users_ref.get() or {}
@@ -417,28 +447,36 @@ async def handle_actions(client, message):
             }
 
             try:
-                db.reference(f"files/{unique_id}").set(file_data)
+                if firebase_initialized:
+                    db.reference(f"files/{unique_id}").set(file_data)
+                else:
+                    raise Exception("Firebase not initialized")
+                    
+                bot_username = (await client.get_me()).username
+                share_link = f"https://t.me/{bot_username}?start={unique_id}"
+                
+                short_link = shorten_url(share_link) or share_link
+                
+                await message.reply(
+                    f"✅ *Batch Upload Complete!*\n\n"
+                    f"🔗 Original Link: `{share_link}`\n"
+                    f"🪄 Short Link: `{short_link}`\n\n"
+                    f"📌 Files will be stored permanently until deleted.",
+                    parse_mode=enums.ParseMode.MARKDOWN
+                )
             except Exception as e:
                 await message.reply(f"❌ Error saving file: {e}")
-                return
-
-            bot_username = (await client.get_me()).username
-            share_link = f"https://t.me/{bot_username}?start={unique_id}"
-            
-            short_link = shorten_url(share_link) or share_link
-            
-            await message.reply(
-                f"✅ *Batch Upload Complete!*\n\n"
-                f"🔗 Original Link: `{share_link}`\n"
-                f"🪄 Short Link: `{short_link}`\n\n"
-                f"📌 Files will be stored permanently until deleted.",
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-            user_states.pop(user_id, None)
+            finally:
+                user_states.pop(user_id, None)
 
         elif state["mode"] == "broadcast":
             if not state["content"]:
                 await message.reply("❌ No content to broadcast! Operation canceled.")
+                user_states.pop(user_id, None)
+                return
+
+            if not firebase_initialized:
+                await message.reply("❌ Firebase not initialized. Cannot broadcast.")
                 user_states.pop(user_id, None)
                 return
 
@@ -469,11 +507,14 @@ async def handle_actions(client, message):
                                 "audio": client.send_audio
                             }.get(item["type"])
                             if method:
-                                await method(
-                                    int(user_id),
-                                    item["file_id"],
-                                    caption=item.get("caption", None)
-                                )
+                                kwargs = {
+                                    "chat_id": int(user_id),
+                                    item["type"]: item["file_id"]
+                                }
+                                if item.get("caption"):
+                                    kwargs["caption"] = item["caption"]
+                                
+                                await method(**kwargs)
                     success += 1
                 except Exception as e:
                     logger.error(f"Error broadcasting to {user_id}: {e}")
@@ -550,11 +591,20 @@ async def set_commands():
         BotCommand("shortener", "Shorten URLs using GPLinks (Owner)")
     ])
 
-app.start()
-print("Bot started!")
-app.loop.run_until_complete(set_commands())
+async def main():
+    await app.start()
+    await set_commands()
+    print("Bot started successfully!")
+    
+    # Keep the bot running
+    await asyncio.Event().wait()
 
-try:
-    asyncio.get_event_loop().run_forever()
-except KeyboardInterrupt:
-    print("Bot stopped!")
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot stopped gracefully")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+    finally:
+        print("Bot process ended")
