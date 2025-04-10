@@ -8,7 +8,7 @@ from firebase_admin import credentials, db
 from pyrogram import Client, filters, enums
 from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import urllib.parse
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 BOT_TOKEN = "7204884576:AAGLHvP_ALG_uWVG8YpFxRCvEDq3QXk9Kjw"
 API_ID = 24360857
-API_HASH = "0924b59c45bf69cdfafd14188fb1b768"
+API_HASH = "0924b59c45bf69cdfafd14188fb1b778"
 OWNER_IDS = [5891854177]
 SHORTENER_API = "d2d9a81c236ad681edfbb260cb315628df46cc38"
 SHORTENER_URL = "https://api.gplinks.com/api"
@@ -190,12 +190,6 @@ async def stats_command(client, message):
         total_files = len(files)
         active_files = sum(1 for f in files.values() if not f.get("deleted", False))
         
-        # Get broadcasts count (assuming each broadcast creates a record)
-        # Note: You might need to add broadcast tracking in your database
-        broadcasts_ref = db.reference("broadcasts")
-        broadcasts = broadcasts_ref.get() or {}
-        total_broadcasts = len(broadcasts)
-        
         # Get channel members count
         try:
             channel = await client.get_chat(CHANNEL_ID)
@@ -216,9 +210,6 @@ async def stats_command(client, message):
 • Total Files: `{total_files}`
 • Active Files: `{active_files}`
 • Deleted Files: `{total_files - active_files}`
-
-📢 *Broadcasts:*
-• Total Broadcasts: `{total_broadcasts}`
 
 📢 *Channel Stats:*
 • Channel Members: `{channel_members}`
